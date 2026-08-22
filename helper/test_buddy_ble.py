@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from .buddy_ble import (
     NUS_SERVICE_UUID,
     ByteLineDecoder,
-    LatestLineBuffer,
+    TxLineBuffer,
     ProtocolError,
     chunk_bytes,
     matches_buddy,
@@ -25,12 +25,28 @@ class ByteLineDecoderTests(unittest.TestCase):
             decoder.push(b"12345")
 
 
-class LatestLineBufferTests(unittest.IsolatedAsyncioTestCase):
+class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
     async def test_latest_snapshot_replaces_stale_snapshot(self) -> None:
-        buffer = LatestLineBuffer()
+        buffer = TxLineBuffer()
         await buffer.put("first\n")
         await buffer.put("second\n")
         self.assertEqual(await buffer.get(), "second\n")
+
+    async def test_reliable_lines_are_fifo_and_precede_latest(self) -> None:
+        buffer = TxLineBuffer()
+        await buffer.put("snapshot\n")
+        await buffer.put("one\n", "reliable")
+        await buffer.put("two\n", "reliable")
+        self.assertEqual(await buffer.get(), "one\n")
+        self.assertEqual(await buffer.get(), "two\n")
+        self.assertEqual(await buffer.get(), "snapshot\n")
+
+    async def test_disconnect_discards_reliable_but_keeps_latest_snapshot(self) -> None:
+        buffer = TxLineBuffer()
+        await buffer.put("snapshot\n")
+        await buffer.put("stale-command\n", "reliable")
+        await buffer.discard_reliable()
+        self.assertEqual(await buffer.get(), "snapshot\n")
 
 
 class UtilityTests(unittest.TestCase):

@@ -41,9 +41,9 @@ test('diagnostics include status and non-secret settings in a stable text envelo
   assert.match(text, /"everConnected": false/)
 })
 
-test('remote contract exposes status and reconnect under one namespace', () => {
+test('remote contract exposes status, reconnect, and role-pack install under one namespace', () => {
   assert.deepEqual(
     ESP_BUDDY_INVOCATIONS.map(invocation => `${invocation.namespace}/${invocation.method}`),
-    ['espBuddy/status', 'espBuddy/reconnect'],
+    ['espBuddy/status', 'espBuddy/reconnect', 'espBuddy/installRolePack'],
   )
 })

@@ -3,7 +3,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 
-import type { EspBuddySettings, EspBuddyStatus } from '../contract.ts'
+import type { EspBuddySettings, EspBuddyStatus, RolePackProgress, RolePackWireFile } from '../contract.ts'
 import { EspBuddySection, type EspBuddySectionInjected } from './SettingsSection.tsx'
 import { NS, en, zh } from './locales.ts'
 import { ESP_BUDDY_REMOTE } from './remote.ts'
@@ -14,6 +14,7 @@ export const inject = ['remote', 'slots', 'locale', 'settingsScope']
 interface EspBuddyNamespaceFace {
   status(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
   reconnect(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
+  installRolePack(files: readonly RolePackWireFile[]): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
 }
 
 export function apply(ctx: ClientContext): void {
@@ -45,6 +46,12 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value
   }
+  const installRolePack = async (files: readonly RolePackWireFile[]): Promise<RolePackProgress> => {
+    if (remote === undefined) throw new Error('dsh-esp-buddy: role-pack service is not mounted')
+    const result = await remote.installRolePack(files)
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -56,6 +63,7 @@ export function apply(ctx: ClientContext): void {
       hooks: { scope },
       readStatus,
       reconnect,
+      installRolePack,
       setSetting: async (field, value) => { await scope.set(field, value) },
     }),
   }, EspBuddySection))

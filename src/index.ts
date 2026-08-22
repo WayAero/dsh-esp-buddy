@@ -8,9 +8,11 @@ import type {} from '@deepseek-ai/dsh-typert-registry'
 
 import { ApprovalManager } from './approval/approval-manager.ts'
 import { Config, type Config as PluginConfig, type ResolvedConfig } from './config.ts'
-import type { EspBuddyStatus } from './contract.ts'
+import type { EspBuddyStatus, RolePackProgress, RolePackWireFile } from './contract.ts'
 import { parsePermissionReply, serializeBuddyState } from './protocol/buddy.ts'
 import { ProjectionManager } from './projection/projection-manager.ts'
+import { CommandAckRouter } from './role-pack/command-ack.ts'
+import { RolePackTransferManager } from './role-pack/transfer-manager.ts'
 import { EspBuddyRuntime } from './runtime.ts'
 import { SessionManager } from './session/session-manager.ts'
 import { registerEspBuddySettings } from './settings.ts'
@@ -82,11 +84,21 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   let lastRxAt: string | undefined
   let lastTxAt: string | undefined
   let lastError: string | undefined
+  let rolePackProgress: RolePackProgress = { phase: 'idle', sentBytes: 0, totalBytes: 0 }
   let stopHeartbeat: (() => void) | undefined
   let stopStateListener: (() => void) | undefined
 
-  const sendSnapshot = () => {
-    if (!buddyConnected || helper === undefined) return
+  const ackRouter = new CommandAckRouter()
+  const rolePackTransfer = new RolePackTransferManager({
+    ackRouter,
+    isConnected: () => buddyConnected,
+    sendReliable: line => helper?.sendBuddyLine(line, 'reliable') ?? false,
+    onProgress: progress => { rolePackProgress = progress },
+    onSettled: () => sendSnapshot(),
+  })
+
+  function sendSnapshot(): void {
+    if (!buddyConnected || helper === undefined || rolePackTransfer.isActive()) return
     try {
       if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), 1))) {
         lastTxAt = new Date().toISOString()
@@ -122,6 +134,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
             console.info(`[dsh-esp-buddy] BLE ${event.connected ? 'connected' : 'disconnected'}${detail}`)
           }
           buddyConnected = event.connected
+          if (!event.connected) ackRouter.disconnect()
           if (event.connected) everConnected = true
           buddyDevice = event.connected ? event.device : undefined
           buddyMtu = event.connected ? event.mtu : undefined
@@ -135,6 +148,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
         if (event.type === 'rx') {
           lastRxAt = new Date().toISOString()
           try {
+            if (ackRouter.route(event.line)) return
             const reply = parsePermissionReply(event.line)
             if (!approvals.answer(reply)) console.warn(`[dsh-esp-buddy] ignored stale prompt reply id=${reply.id}`)
           } catch (error) {
@@ -168,6 +182,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     buddyConnected = false
     buddyDevice = undefined
     buddyMtu = undefined
+    ackRouter.disconnect()
     await approvals.setConnected(false)
     const current = helper
     helper = undefined
@@ -200,6 +215,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
       ...(lastRxAt === undefined ? {} : { lastRxAt }),
       ...(lastTxAt === undefined ? {} : { lastTxAt }),
       ...(lastError === undefined ? {} : { lastError }),
+      rolePack: rolePackProgress,
       sessions: current.total,
       running: current.running,
       waiting: current.waiting,
@@ -209,10 +225,15 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
   const reconnectTransport = (): Promise<EspBuddyStatus> => runTransport(async () => {
     if (!activeConfig.enabled) throw new Error('ESP Buddy is disabled')
+    if (rolePackTransfer.isActive()) throw new Error('A role pack is being transferred')
     await restartTransport(activeConfig, true)
     return readStatus()
   })
-  new EspBuddyRuntime(ctx, readStatus, reconnectTransport)
+  const installRolePack = async (files: readonly RolePackWireFile[]): Promise<RolePackProgress> => {
+    if (!activeConfig.enabled) throw new Error('ESP Buddy is disabled')
+    return rolePackTransfer.install(files)
+  }
+  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack)
   ctx.effect(() => {
     const dispose = ctx.typert.register(TYPERT_MANIFEST)
     return () => { void dispose() }

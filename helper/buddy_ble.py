@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import sys
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -75,25 +76,37 @@ class ByteLineDecoder:
         self._buffer.clear()
 
 
-class LatestLineBuffer:
-    """Single-slot latest-wins buffer for complete Buddy snapshots."""
+class TxLineBuffer:
+    """Reliable FIFO plus a single latest-wins snapshot slot."""
 
     def __init__(self) -> None:
         self._condition = asyncio.Condition()
-        self._line: str | None = None
+        self._latest: str | None = None
+        self._reliable: deque[str] = deque()
 
-    async def put(self, line: str) -> None:
+    async def put(self, line: str, mode: str = "latest") -> None:
         async with self._condition:
-            self._line = line
+            if mode == "reliable":
+                self._reliable.append(line)
+            elif mode == "latest":
+                self._latest = line
+            else:
+                raise ProtocolError("tx.mode must be latest or reliable")
             self._condition.notify()
 
     async def get(self) -> str:
         async with self._condition:
-            await self._condition.wait_for(lambda: self._line is not None)
-            line = self._line
-            self._line = None
+            await self._condition.wait_for(lambda: bool(self._reliable) or self._latest is not None)
+            if self._reliable:
+                return self._reliable.popleft()
+            line = self._latest
+            self._latest = None
             assert line is not None
             return line
+
+    async def discard_reliable(self) -> None:
+        async with self._condition:
+            self._reliable.clear()
 
 
 def chunk_bytes(payload: bytes, chunk_size: int) -> list[bytes]:
@@ -119,7 +132,7 @@ class BuddyBleHelper:
         self._config = config
         self._stop = asyncio.Event()
         self._disconnected = asyncio.Event()
-        self._tx = LatestLineBuffer()
+        self._tx = TxLineBuffer()
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None
         self._device_failures = 0
@@ -165,7 +178,10 @@ class BuddyBleHelper:
         payload = line[:-1].encode("utf-8")
         if len(payload) > BUDDY_LINE_MAX:
             raise ProtocolError("tx.line exceeds Buddy line limit")
-        await self._tx.put(line)
+        mode = command.get("mode", "latest")
+        if mode not in ("latest", "reliable"):
+            raise ProtocolError("tx.mode must be latest or reliable")
+        await self._tx.put(line, mode)
 
     async def _ble_loop(self) -> None:
         backoff = 1.0
@@ -190,6 +206,7 @@ class BuddyBleHelper:
                         self._device_failures = 0
             finally:
                 await self._disconnect()
+                await self._tx.discard_reliable()
                 emit_event({"type": "status", "connected": False})
 
             if not self._stop.is_set():

@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.2.5.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.3.1.tgz
 dsh web
 ```
 
@@ -56,6 +56,19 @@ dsh web
 断开时为红色。复制的诊断信息可发送给 DeepSeek Harness、Codex 等 Agent 协助排查。
 
 ![ESP Buddy 设置页](docs/esp-buddy-settings-0.2.5.png)
+
+![角色包发送完成](docs/esp-buddy-settings-0.3.0.png)
+
+## 角色包发送
+
+在“设置 → ESP Buddy → 角色包”中选择或拖入一个角色包目录。当前固件只接受扁平目录，目录必须至少包含
+`manifest.json` 与 `idle.gif`（或 `idle_0.gif`）；文件名最长 64 字节、总大小不超过 1,800,000 字节。
+传输以 ESP 的 ACK 为边界逐命令推进，断线或负 ACK 会明确报错，不会在重连后继续发送陈旧命令。
+
+发布包附带 `role-packs/dsh-pet-maid` 示例包。其动画素材来自
+[PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，按作者说明仅可开源使用、禁止商用；
+详情见包内 `NOTICE.txt` 与 [归属说明](docs/dsh-pet-role-pack-attribution.md)。插件代码采用 MIT，
+不改变该第三方素材的限制。
 
 ## 默认配置
 

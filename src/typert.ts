@@ -20,6 +20,10 @@ export const TYPERT_MANIFEST: TypertContribution = {
         kind: 'method',
         name: 'reconnect',
         signature: 'reconnect(): Promise<EspBuddyStatus>',
+      }, {
+        kind: 'method',
+        name: 'installRolePack',
+        signature: 'installRolePack(files: RolePackWireFile[]): Promise<RolePackProgress>',
       }],
       types: [],
     }],

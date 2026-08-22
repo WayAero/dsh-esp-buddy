@@ -2,13 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 
-import type { EspBuddyStatus, EspBuddySettings } from '../contract.ts'
+import type { EspBuddyStatus, EspBuddySettings, RolePackProgress, RolePackWireFile } from '../contract.ts'
 import { connectionTone, formatDiagnostics } from './model.ts'
+import { RolePackSection } from './RolePackSection.tsx'
 
 export interface EspBuddySectionInjected {
   hooks: { scope: SettingsScope<EspBuddySettings> }
   readStatus: () => Promise<EspBuddyStatus>
   reconnect: () => Promise<EspBuddyStatus>
+  installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
   setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
 }
 
@@ -30,7 +32,7 @@ const helperStatusKeys = {
   blocked: 'status.helper.blocked',
 } as const
 
-export function EspBuddySection({ useScope, readStatus, reconnect, setSetting, t }: EspBuddySectionProps) {
+export function EspBuddySection({ useScope, readStatus, reconnect, installRolePack, setSetting, t }: EspBuddySectionProps) {
   const config = useScope(snapshot => snapshot.value)
   const [status, setStatus] = useState<EspBuddyStatus>()
   const [statusError, setStatusError] = useState(false)
@@ -154,6 +156,14 @@ export function EspBuddySection({ useScope, readStatus, reconnect, setSetting, t
         </div>
         <p className="dsh_espBuddy_actionHint">{t('action.copyHint')}</p>
       </div>
+
+      <RolePackSection
+        connected={status?.connected ?? false}
+        enabled={enabled}
+        progress={status?.rolePack ?? { phase: 'idle', sentBytes: 0, totalBytes: 0 }}
+        installRolePack={installRolePack}
+        t={t}
+      />
 
       <div className="dsh_espBuddy_group">
         <div className="dsh_espBuddy_groupHeader">

@@ -1,7 +1,7 @@
 export const HELPER_IPC_LINE_MAX = 16 * 1024
 
 export type HelperCommand =
-  | { type: 'tx'; line: string }
+  | { type: 'tx'; line: string; mode?: 'latest' | 'reliable' }
   | { type: 'stop' }
 
 export type HelperEvent =
