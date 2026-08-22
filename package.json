@@ -1,6 +1,6 @@
 {
   "name": "dsh-esp-buddy",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "description": "DeepSeek Harness hardware bridge for ESP32-S3 Buddy",
   "type": "module",
   "main": "dist/index.js",
@@ -14,6 +14,7 @@
     "helper/buddy_ble.py",
     "helper/requirements.txt",
     "bin",
+    "docs/esp-buddy-settings-0.2.5.png",
     "cordis.patch.yml",
     "dsh.plugin.json",
     "README.md",

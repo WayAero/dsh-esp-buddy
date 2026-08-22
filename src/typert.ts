@@ -16,6 +16,10 @@ export const TYPERT_MANIFEST: TypertContribution = {
         kind: 'method',
         name: 'status',
         signature: 'status(): EspBuddyStatus',
+      }, {
+        kind: 'method',
+        name: 'reconnect',
+        signature: 'reconnect(): Promise<EspBuddyStatus>',
       }],
       types: [],
     }],

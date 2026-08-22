@@ -13,6 +13,7 @@ export const inject = ['remote', 'slots', 'locale', 'settingsScope']
 
 interface EspBuddyNamespaceFace {
   status(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
+  reconnect(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
 }
 
 export function apply(ctx: ClientContext): void {
@@ -38,6 +39,12 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value
   }
+  const reconnect = async (): Promise<EspBuddyStatus> => {
+    if (remote === undefined) throw new Error('dsh-esp-buddy: status service is not mounted')
+    const result = await remote.reconnect()
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -48,6 +55,7 @@ export function apply(ctx: ClientContext): void {
     inject: (): EspBuddySectionInjected => ({
       hooks: { scope },
       readStatus,
+      reconnect,
       setSetting: async (field, value) => { await scope.set(field, value) },
     }),
   }, EspBuddySection))

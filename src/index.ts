@@ -75,6 +75,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
   let helper: HelperProcessManager | undefined
   let buddyConnected = false
+  let everConnected = false
   let buddyDevice: string | undefined
   let buddyMtu: number | undefined
   let lastStatusAt: string | undefined
@@ -105,8 +106,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     stopStateListener = undefined
   }
 
-  const startTransport = (config: ResolvedConfig) => {
-    if (helper !== undefined || !config.enabled || !config.autoConnect) return
+  const startTransport = (config: ResolvedConfig, manual = false) => {
+    if (helper !== undefined || !config.enabled || (!config.autoConnect && !manual)) return
+    lastError = undefined
     const packageRoot = fileURLToPath(new URL('..', import.meta.url))
     const launch = resolveHelperLaunch(packageRoot)
     helper = new HelperProcessManager({
@@ -120,6 +122,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
             console.info(`[dsh-esp-buddy] BLE ${event.connected ? 'connected' : 'disconnected'}${detail}`)
           }
           buddyConnected = event.connected
+          if (event.connected) everConnected = true
           buddyDevice = event.connected ? event.device : undefined
           buddyMtu = event.connected ? event.mtu : undefined
           if (event.connected) lastError = undefined
@@ -171,9 +174,16 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     await current?.stop()
   }
 
-  const restartTransport = async (config: ResolvedConfig) => {
+  const restartTransport = async (config: ResolvedConfig, manual = false) => {
     await stopTransport()
-    startTransport(config)
+    startTransport(config, manual)
+  }
+
+  let transportTail = Promise.resolve()
+  const runTransport = <T>(operation: () => Promise<T> | T): Promise<T> => {
+    const run = transportTail.then(operation, operation)
+    transportTail = run.then(() => undefined, () => undefined)
+    return run
   }
 
   const readStatus = (): EspBuddyStatus => {
@@ -183,6 +193,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
       autoConnect: activeConfig.autoConnect,
       helperState: helper?.getState() ?? 'stopped',
       connected: buddyConnected,
+      everConnected,
       ...(buddyDevice === undefined ? {} : { device: buddyDevice }),
       ...(buddyMtu === undefined ? {} : { mtu: buddyMtu }),
       ...(lastStatusAt === undefined ? {} : { lastStatusAt }),
@@ -196,7 +207,12 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     }
   }
 
-  new EspBuddyRuntime(ctx, readStatus)
+  const reconnectTransport = (): Promise<EspBuddyStatus> => runTransport(async () => {
+    if (!activeConfig.enabled) throw new Error('ESP Buddy is disabled')
+    await restartTransport(activeConfig, true)
+    return readStatus()
+  })
+  new EspBuddyRuntime(ctx, readStatus, reconnectTransport)
   ctx.effect(() => {
     const dispose = ctx.typert.register(TYPERT_MANIFEST)
     return () => { void dispose() }
@@ -205,15 +221,21 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
   const stopSettingsWatch = settings.watch(async (next, previous) => {
     activeConfig = next
     approvals.setTimeoutMs(next.approvalTimeoutMs)
-    const transportEnabled = next.enabled && next.autoConnect
-    const wasTransportEnabled = previous.enabled && previous.autoConnect
-    const needsRestart = transportEnabled && wasTransportEnabled && (
+    const needsRestart = helper !== undefined && (
       next.deviceNamePrefix !== previous.deviceNamePrefix
       || next.heartbeatIntervalMs !== previous.heartbeatIntervalMs
     )
-    if (!transportEnabled) await stopTransport()
-    else if (!wasTransportEnabled) startTransport(next)
-    else if (needsRestart) await restartTransport(next)
+    await runTransport(async () => {
+      if (!next.enabled) await stopTransport()
+      else if (next.autoConnect !== previous.autoConnect) {
+        if (next.autoConnect) startTransport(next)
+        else await stopTransport()
+      } else if (!previous.enabled && next.enabled) {
+        startTransport(next)
+      } else if (needsRestart) {
+        await restartTransport(next, true)
+      }
+    })
   })
 
   startTransport(activeConfig)
@@ -222,7 +244,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
 
   ctx.effect(() => async () => {
     stopSettingsWatch()
-    await stopTransport()
+    await runTransport(stopTransport)
     await approvals.dispose()
     projections.dispose()
     sessions.dispose()

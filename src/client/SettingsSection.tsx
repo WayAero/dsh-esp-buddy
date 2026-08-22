@@ -3,10 +3,12 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 
 import type { EspBuddyStatus, EspBuddySettings } from '../contract.ts'
+import { connectionTone, formatDiagnostics } from './model.ts'
 
 export interface EspBuddySectionInjected {
   hooks: { scope: SettingsScope<EspBuddySettings> }
   readStatus: () => Promise<EspBuddyStatus>
+  reconnect: () => Promise<EspBuddyStatus>
   setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
 }
 
@@ -28,11 +30,12 @@ const helperStatusKeys = {
   blocked: 'status.helper.blocked',
 } as const
 
-export function EspBuddySection({ useScope, readStatus, setSetting, t }: EspBuddySectionProps) {
+export function EspBuddySection({ useScope, readStatus, reconnect, setSetting, t }: EspBuddySectionProps) {
   const config = useScope(snapshot => snapshot.value)
   const [status, setStatus] = useState<EspBuddyStatus>()
   const [statusError, setStatusError] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle')
+  const [actionState, setActionState] = useState<'idle' | 'reconnecting' | 'reconnectStarted' | 'copied' | 'failed'>('idle')
 
   const refresh = useCallback(async () => {
     try {
@@ -61,6 +64,7 @@ export function EspBuddySection({ useScope, readStatus, setSetting, t }: EspBudd
   }
 
   const enabled = config?.enabled ?? true
+  const tone = connectionTone(status, statusError)
   const connectionLabel = statusError
     ? t('status.unavailable')
     : status === undefined
@@ -68,6 +72,32 @@ export function EspBuddySection({ useScope, readStatus, setSetting, t }: EspBudd
       : status.connected
         ? t('status.connected')
         : t('status.disconnected')
+
+  const resetActionLater = () => window.setTimeout(() => setActionState('idle'), 2_000)
+  const handleReconnect = async () => {
+    setActionState('reconnecting')
+    try {
+      setStatus(await reconnect())
+      setStatusError(false)
+      setActionState('reconnectStarted')
+    } catch {
+      setActionState('failed')
+    }
+    resetActionLater()
+  }
+  const handleCopyDiagnostics = async () => {
+    if (config === undefined) return
+    try {
+      const current = await readStatus()
+      setStatus(current)
+      setStatusError(false)
+      await navigator.clipboard.writeText(formatDiagnostics(current, config))
+      setActionState('copied')
+    } catch {
+      setActionState('failed')
+    }
+    resetActionLater()
+  }
 
   return (
     <section className="dsh_espBuddy_section" aria-labelledby="dsh-esp-buddy-settings-title">
@@ -88,7 +118,7 @@ export function EspBuddySection({ useScope, readStatus, setSetting, t }: EspBudd
       <div className="dsh_espBuddy_group">
         <div className="dsh_espBuddy_groupHeader">
           <h3>{t('status.title')}</h3>
-          <span className={`dsh_espBuddy_connection ${status?.connected ? 'is-connected' : ''}`}>
+          <span className={`dsh_espBuddy_connection is-${tone}`}>
             <i aria-hidden="true" />{connectionLabel}
           </span>
         </div>
@@ -105,6 +135,24 @@ export function EspBuddySection({ useScope, readStatus, setSetting, t }: EspBudd
           <div><dt>{t('status.tokens')}</dt><dd>{status?.tokens ?? '—'}</dd></div>
         </dl>
         {status?.lastError && <p className="dsh_espBuddy_error"><strong>{t('status.error')}：</strong>{status.lastError}</p>}
+        <div className="dsh_espBuddy_actions">
+          <button type="button" disabled={!enabled || actionState === 'reconnecting'} onClick={() => { void handleReconnect() }}>
+            {actionState === 'reconnecting' ? t('action.reconnecting') : t('action.reconnect')}
+          </button>
+          <button type="button" disabled={status === undefined || config === undefined} onClick={() => { void handleCopyDiagnostics() }}>
+            {t('action.copyDiagnostics')}
+          </button>
+          {actionState !== 'idle' && actionState !== 'reconnecting' && (
+            <span className={actionState === 'failed' ? 'dsh_espBuddy_actionState is-failed' : 'dsh_espBuddy_actionState'}>
+              {t(actionState === 'reconnectStarted'
+                ? 'action.reconnectStarted'
+                : actionState === 'copied'
+                  ? 'action.copied'
+                  : 'action.failed')}
+            </span>
+          )}
+        </div>
+        <p className="dsh_espBuddy_actionHint">{t('action.copyHint')}</p>
       </div>
 
       <div className="dsh_espBuddy_group">

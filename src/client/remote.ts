@@ -10,9 +10,11 @@ export const ESP_BUDDY_REMOTE: TypertRemoteContribution = {
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$6573704275646479 {
     status: () => Promise<RemoteResult<EspBuddyStatus>>
+    reconnect: () => Promise<RemoteResult<EspBuddyStatus>>
   }
   interface TypertRemoteMap {
     'espBuddy/status': () => Promise<RemoteResult<EspBuddyStatus>>
+    'espBuddy/reconnect': () => Promise<RemoteResult<EspBuddyStatus>>
   }
   interface TypertRemoteNamespaceMap {
     espBuddy: TypertRemoteNamespace$6573704275646479

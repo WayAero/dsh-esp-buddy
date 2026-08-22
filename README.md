@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.2.2.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.2.5.tgz
 dsh web
 ```
 
@@ -41,17 +41,21 @@ dsh web
 
 ## 设置与状态
 
-安装到 Web profile 后，打开 DSH 的“设置 → ESP32 伙伴”。页面提供：
+安装到 Web profile 后，打开 DSH 的“设置 → ESP Buddy”。页面提供：
 
 - 启用/停用插件，以及自动连接开关；
 - BLE 连接状态、设备名、MTU、Helper 状态和最近收发时间；
 - 当前会话数、运行数、待审批数和 Token 聚合值；
+- 重新连接与复制诊断信息；
 - BLE 设备名前缀、审批超时和状态心跳配置。
 
 配置写入 `%USERPROFILE%\.dsh\settings.yaml` 的 `esp-buddy` namespace，并实时生效。修改设备名前缀
 或心跳周期会重启 BLE helper；修改审批超时只影响之后收到的新请求。页面每 2 秒刷新一次状态。
 
-![ESP32 伙伴设置页](docs/esp-buddy-settings-0.2.2.png)
+连接圆点使用三态语义：已连接为绿色；从未连接成功且没有连接错误时为白色；连接失败，或曾连接成功后
+断开时为红色。复制的诊断信息可发送给 DeepSeek Harness、Codex 等 Agent 协助排查。
+
+![ESP Buddy 设置页](docs/esp-buddy-settings-0.2.5.png)
 
 ## 默认配置
 

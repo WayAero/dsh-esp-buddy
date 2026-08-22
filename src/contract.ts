@@ -11,6 +11,7 @@ export interface EspBuddyStatus {
   readonly autoConnect: boolean
   readonly helperState: HelperProcessState
   readonly connected: boolean
+  readonly everConnected: boolean
   readonly device?: string
   readonly mtu?: number
   readonly lastStatusAt?: string
@@ -28,6 +29,7 @@ export const espBuddyStatusSchema = z.object({
   autoConnect: z.boolean(),
   helperState: z.enum(['stopped', 'starting', 'running', 'backoff', 'blocked']),
   connected: z.boolean(),
+  everConnected: z.boolean(),
   device: z.string().optional(),
   mtu: z.number().int().min(23).optional(),
   lastStatusAt: z.string().optional(),
@@ -46,6 +48,19 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
     service: 'espBuddy',
     namespace: 'espBuddy',
     method: 'status',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-esp-buddy#EspBuddyStatus',
+      schema: espBuddyStatusSchema,
+    },
+  },
+  {
+    id: 'dsh-esp-buddy#espBuddy/reconnect',
+    service: 'espBuddy',
+    namespace: 'espBuddy',
+    method: 'reconnect',
     invocation: { kind: 'direct' },
     parameters: [],
     result: {
