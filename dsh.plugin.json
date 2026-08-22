@@ -1,0 +1,12 @@
+{
+  "name": "dsh-esp-buddy",
+  "description": "DeepSeek Harness hardware bridge for ESP32-S3 Buddy",
+  "version": "0.2.2",
+  "entry": {
+    "name": "dsh-esp-buddy",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}

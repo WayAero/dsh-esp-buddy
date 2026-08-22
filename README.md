@@ -32,14 +32,28 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.1.0.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.2.2.tgz
 dsh web
 ```
 
 插件默认启用并自动连接名称以 `Claude` 开头、且提供 Nordic UART Service 的 Buddy。
 首次连接使用固件的 Secure Connections + MITM 配置；Windows 需要先在系统蓝牙界面完成配对。
 
-## 配置
+## 设置与状态
+
+安装到 Web profile 后，打开 DSH 的“设置 → ESP32 伙伴”。页面提供：
+
+- 启用/停用插件，以及自动连接开关；
+- BLE 连接状态、设备名、MTU、Helper 状态和最近收发时间；
+- 当前会话数、运行数、待审批数和 Token 聚合值；
+- BLE 设备名前缀、审批超时和状态心跳配置。
+
+配置写入 `%USERPROFILE%\.dsh\settings.yaml` 的 `esp-buddy` namespace，并实时生效。修改设备名前缀
+或心跳周期会重启 BLE helper；修改审批超时只影响之后收到的新请求。页面每 2 秒刷新一次状态。
+
+![ESP32 伙伴设置页](docs/esp-buddy-settings-0.2.2.png)
+
+## 默认配置
 
 发布包携带的默认 patch 为：
 
@@ -65,5 +79,5 @@ dsh web
 - 多 Session 由 Harness Agent 状态聚合；多个 Approval 使用 FIFO，一次只在屏幕显示一个。
 - BLE helper 只负责 scan/connect/NUS/分片/重连，不理解 Harness 业务。
 
-Windows 实机已验证自动连接、状态显示、3 秒 heartbeat、Allow Once 与 Deny 回传。多 Session、
+Windows 实机已验证设置页、自动连接、状态显示、3 秒 heartbeat、Allow Once 与 Deny 回传。多 Session、
 Token/Context 聚合及 Approval FIFO 由无硬件测试覆盖；当前发布包尚未覆盖 Linux/macOS helper binary。

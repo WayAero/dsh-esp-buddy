@@ -20,7 +20,7 @@ export interface ApprovalManagerOptions {
 export class ApprovalManager {
   private readonly scheduler = new PromptScheduler()
   private readonly runtimes = new Map<string, PendingRuntime>()
-  private readonly timeoutMs: number
+  private timeoutMs: number
   private readonly onChanged: () => void
   private readonly now: () => number
   private connected = false
@@ -35,6 +35,10 @@ export class ApprovalManager {
 
   isConnected(): boolean {
     return this.connected
+  }
+
+  setTimeoutMs(timeoutMs: number): void {
+    this.timeoutMs = timeoutMs
   }
 
   async setConnected(connected: boolean): Promise<void> {

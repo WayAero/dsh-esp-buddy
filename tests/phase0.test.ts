@@ -45,12 +45,38 @@ class MockApproval extends Service {
   }
 }
 
+class MockSettings extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'settings')
+  }
+
+  register(_namespace: string, schema: (value: unknown) => unknown, options?: { base?: unknown }) {
+    const value = schema(options?.base ?? {})
+    return {
+      get: () => value,
+      watch: () => () => undefined,
+    }
+  }
+}
+
+class MockTypert extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'typert')
+  }
+
+  register(): () => void {
+    return () => undefined
+  }
+}
+
 async function createContext(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(MockAgents)
   await ctx.plugin(MockSessions)
   await ctx.plugin(MockSessionProjections)
   await ctx.plugin(MockApproval)
+  await ctx.plugin(MockSettings)
+  await ctx.plugin(MockTypert)
   return ctx
 }
 
