@@ -1,0 +1,9 @@
+- insert:
+    - id: esp-buddy
+      name: dsh-esp-buddy
+      config:
+        enabled: true
+        autoConnect: true
+        approvalTimeoutMs: 300000
+        heartbeatIntervalMs: 3000
+        deviceNamePrefix: Claude
