@@ -26,7 +26,7 @@
     "build": "node build.mjs",
     "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper-windows.ps1",
     "test:hardware": "node --experimental-strip-types scripts/hardware-smoke.ts",
-    "prepack": "npm run build",
+    "prepare": "npm run build",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
     "test:phase0": "node --test --experimental-strip-types tests/phase0.test.ts",
     "test:python": "python -m unittest -v helper/test_buddy_ble.py",
