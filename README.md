@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.3.2.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.3.3.tgz
 dsh web
 ```
 
@@ -41,7 +41,7 @@ dsh web
 
 ## 设置与状态
 
-安装到 Web profile 后，打开 DSH 的“设置 → ESP Buddy”。页面提供：
+安装到 Web profile 后，打开 DSH 的“设置 → 插件 → 插件配置”，找到“ESP Buddy”卡片。卡片提供：
 
 - 启用/停用插件，以及自动连接开关；
 - BLE 连接状态、设备名、MTU、Helper 状态和最近收发时间；
@@ -61,7 +61,7 @@ dsh web
 
 ## 角色包发送
 
-在“设置 → ESP Buddy → 角色包”中选择或拖入一个角色包目录。当前固件只接受扁平目录，目录必须至少包含
+在 ESP Buddy 卡片的“角色包”区域选择或拖入一个角色包目录。当前固件只接受扁平目录，目录必须至少包含
 `manifest.json` 与 `idle.gif`（或 `idle_0.gif`）；文件名最长 64 字节、总大小不超过 1,800,000 字节。
 传输以 ESP 的 ACK 为边界逐命令推进，断线或负 ACK 会明确报错，不会在重连后继续发送陈旧命令。
 
