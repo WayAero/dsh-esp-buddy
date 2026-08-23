@@ -2,6 +2,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 
 import type { EspBuddySettings, EspBuddyStatus, RolePackProgress, RolePackWireFile } from '../contract.ts'
 import { EspBuddySection, type EspBuddySectionInjected } from './SettingsSection.tsx'
@@ -53,11 +54,9 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'esp-buddy',
-    order: 56,
-    label: () => t('nav'),
+  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+    name: 'settings.plugin.item',
+    key: 'esp-buddy',
     locale: NS,
     inject: (): EspBuddySectionInjected => ({
       hooks: { scope },

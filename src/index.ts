@@ -15,14 +15,14 @@ import { CommandAckRouter } from './role-pack/command-ack.ts'
 import { RolePackTransferManager } from './role-pack/transfer-manager.ts'
 import { EspBuddyRuntime } from './runtime.ts'
 import { SessionManager } from './session/session-manager.ts'
-import { registerEspBuddySettings } from './settings.ts'
+import { installEspBuddySettings } from './settings.ts'
 import { BuddyStateStore } from './state/buddy-state.ts'
 import { HelperProcessManager } from './transport/helper-process.ts'
 import { resolveHelperLaunch } from './transport/launch.ts'
 import { TYPERT_MANIFEST } from './typert.ts'
 
 export const name = 'dsh-esp-buddy'
-export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'settings', 'typert']
+export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert']
 export { Config }
 
 function resolvedConfig(config: PluginConfig = {}): ResolvedConfig {
@@ -36,7 +36,7 @@ function resolvedConfig(config: PluginConfig = {}): ResolvedConfig {
 }
 
 export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
-  const settings = registerEspBuddySettings(ctx, resolvedConfig(rawConfig))
+  const settings = installEspBuddySettings(ctx, resolvedConfig(rawConfig))
   let activeConfig = settings.get()
   const state = new BuddyStateStore()
   let sessions!: SessionManager
@@ -239,14 +239,14 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
     return () => { void dispose() }
   }, 'dsh-esp-buddy: typert manifest')
 
-  const stopSettingsWatch = settings.watch(async (next, previous) => {
+  const stopSettingsWatch = settings.watch((next, previous) => {
     activeConfig = next
     approvals.setTimeoutMs(next.approvalTimeoutMs)
     const needsRestart = helper !== undefined && (
       next.deviceNamePrefix !== previous.deviceNamePrefix
       || next.heartbeatIntervalMs !== previous.heartbeatIntervalMs
     )
-    await runTransport(async () => {
+    void runTransport(async () => {
       if (!next.enabled) await stopTransport()
       else if (next.autoConnect !== previous.autoConnect) {
         if (next.autoConnect) startTransport(next)
@@ -256,6 +256,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
       } else if (needsRestart) {
         await restartTransport(next, true)
       }
+    }).catch(error => {
+      lastError = (error as Error).message
+      console.error(`[dsh-esp-buddy] settings apply failed: ${lastError}`)
     })
   })
 

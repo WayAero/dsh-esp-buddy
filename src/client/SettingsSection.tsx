@@ -14,7 +14,7 @@ export interface EspBuddySectionInjected {
   setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
 }
 
-export type EspBuddySectionProps = PropsRuntime<'settings.section'>
+export type EspBuddySectionProps = PropsRuntime<'settings.plugin.item'>
   & InjectFace<EspBuddySectionInjected>
   & PropsLocale<'esp-buddy'>
 

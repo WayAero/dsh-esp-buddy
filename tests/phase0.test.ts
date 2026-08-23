@@ -69,16 +69,25 @@ class MockTypert extends Service {
   }
 }
 
-async function createContext(): Promise<Context> {
+async function createContext(withSettings = true): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(MockAgents)
   await ctx.plugin(MockSessions)
   await ctx.plugin(MockSessionProjections)
   await ctx.plugin(MockApproval)
-  await ctx.plugin(MockSettings)
+  if (withSettings) await ctx.plugin(MockSettings)
   await ctx.plugin(MockTypert)
   return ctx
 }
+
+test('plugin remains active without an optional settings provider', async () => {
+  const ctx = await createContext(false)
+  const fiber = ctx.plugin(buddyPlugin, { enabled: false })
+  await fiber
+
+  assert.notEqual(fiber.uid, null)
+  await fiber.dispose()
+})
 
 test('plugin loads, delegates approval while offline, and unloads cleanly', async () => {
   const ctx = await createContext()
