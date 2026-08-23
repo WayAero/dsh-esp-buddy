@@ -36,12 +36,16 @@ dsh plugin --profile web add .\dsh-esp-buddy-0.3.4.tgz
 dsh web
 ```
 
+从 Git 源安装时，包内 `prepare` 会自动构建 `dist`。pnpm 11 如果阻止 Git 依赖执行构建，会在输出中给出
+需要加入 profile `pnpm-workspace.yaml` 的精确 `allowBuilds` 键；按该提示授权后重试即可。
+
 插件默认启用并自动连接名称以 `Claude` 开头、且提供 Nordic UART Service 的 Buddy。
 首次连接使用固件的 Secure Connections + MITM 配置；Windows 需要先在系统蓝牙界面完成配对。
 
 ## 设置与状态
 
-安装到 Web profile 后，打开 DSH 的“设置 → 插件 → 插件配置”，找到“ESP Buddy”卡片。卡片提供：
+安装到 Web profile 后，打开 DSH 的“设置 → 插件 → 插件配置”，找到“ESP Buddy”卡片。卡片默认折叠，
+点击标题可展开或再次收起。展开后提供：
 
 - 启用/停用插件，以及自动连接开关；
 - BLE 连接状态、设备名、MTU、Helper 状态和最近收发时间；
@@ -54,10 +58,6 @@ dsh web
 
 连接圆点使用三态语义：已连接为绿色；从未连接成功且没有连接错误时为白色；连接失败，或曾连接成功后
 断开时为红色。复制的诊断信息可发送给 DeepSeek Harness、Codex 等 Agent 协助排查。
-
-![ESP Buddy 设置页](docs/esp-buddy-settings-0.2.5.png)
-
-![角色包发送完成](docs/esp-buddy-settings-0.3.0.png)
 
 ## 角色包发送
 
