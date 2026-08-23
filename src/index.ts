@@ -25,18 +25,9 @@ export const name = 'dsh-esp-buddy'
 export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert']
 export { Config }
 
-function resolvedConfig(config: PluginConfig = {}): ResolvedConfig {
-  return {
-    enabled: config.enabled ?? true,
-    autoConnect: config.autoConnect ?? true,
-    approvalTimeoutMs: config.approvalTimeoutMs ?? 300_000,
-    heartbeatIntervalMs: config.heartbeatIntervalMs ?? 3_000,
-    deviceNamePrefix: config.deviceNamePrefix ?? 'Claude',
-  }
-}
-
-export function apply(ctx: Context, rawConfig: PluginConfig = {}): void {
-  const settings = installEspBuddySettings(ctx, resolvedConfig(rawConfig))
+export function apply(ctx: Context, rawConfig: PluginConfig): void {
+  // Cordis validates Config and fills its schema defaults before calling apply().
+  const settings = installEspBuddySettings(ctx, rawConfig as ResolvedConfig)
   let activeConfig = settings.get()
   const state = new BuddyStateStore()
   let sessions!: SessionManager
