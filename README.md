@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.3.1.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.3.2.tgz
 dsh web
 ```
 
@@ -69,6 +69,13 @@ dsh web
 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，按作者说明仅可开源使用、禁止商用；
 详情见包内 `NOTICE.txt` 与 [归属说明](docs/dsh-pet-role-pack-attribution.md)。插件代码采用 MIT，
 不改变该第三方素材的限制。
+
+示例包含 `idle.gif`、`attention.gif`、`busy.gif` 和 `sleep.gif`。四个动画均针对小屏压缩为 84×84、
+60 帧、64 色，合计约 598 KB。当前 ESP 固件只按固定优先级选择一个 GIF，存在 `idle.gif` 时不会自动切换
+到其他状态动画；其余文件先作为完整角色包资源保留，状态驱动切换需要固件后续支持。
+
+角色包命令使用固件允许的 512 原始字节块，以减少 ACK 往返次数。BLE 写入仍遵守实际特征值上限和 4 ms
+分片间隔，避免用不可靠的激进参数换取表面速度。发送期间页面会提示保持连接并耐心等待。
 
 ## 默认配置
 

@@ -3,6 +3,11 @@
   "mode": "gif",
   "source": "PC2005-cloud/dsh-pet",
   "source_commit": "82ba588c7f849a62f1af5df81250e2ca8154c3a3",
-  "asset": "daiji-huxi-xiuxian.gif",
+  "assets": {
+    "idle.gif": "daiji-huxi-xiuxian.gif",
+    "attention.gif": "nvpu-quxi-liyi.gif",
+    "busy.gif": "xie-daima.gif",
+    "sleep.gif": "haqian-liantian.gif"
+  },
   "license_notice": "Open-source use permitted by the source project; commercial use prohibited."
 }

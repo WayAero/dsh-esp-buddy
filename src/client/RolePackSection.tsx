@@ -107,6 +107,7 @@ export function RolePackSection({ connected, enabled, progress, installRolePack,
           <i><b style={{ width: `${percent}%` }} /></i>
         </div>
       )}
+      {active && <p className="dsh_espBuddy_packHint">{t('rolePack.waitHint')}</p>}
       {!connected && <p className="dsh_espBuddy_packHint">{t('rolePack.connectHint')}</p>}
       {(error ?? progress.error) && <p className="dsh_espBuddy_packError">{error ?? progress.error}</p>}
     </div>

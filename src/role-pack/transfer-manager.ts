@@ -2,7 +2,7 @@ import { CommandAckRouter, type RolePackCommand } from './command-ack.ts'
 import { validateRolePack, type ValidatedRolePack } from './pack-reader.ts'
 import type { RolePackProgress, RolePackWireFile } from '../contract.ts'
 
-const RAW_CHUNK_BYTES = 384
+const RAW_CHUNK_BYTES = 512
 const CLEANUP_ERRORS = new Set(['bad_sequence', 'size_mismatch', 'transfer_failed'])
 
 export interface RolePackTransferOptions {

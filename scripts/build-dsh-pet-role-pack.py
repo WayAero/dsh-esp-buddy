@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a display-safe ESP32 GIF from the authorized dsh-pet idle preview."""
+"""Build a compact, display-safe ESP32 GIF from an authorized dsh-pet preview."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ SOURCE_SIZE = (220, 124)
 CROP_BOX = (50, 0, 170, 124)
 OUTPUT_SIZE = (84, 84)
 BACKGROUND = (32, 41, 54)
+FRAME_STEP = 2
+PALETTE_COLORS = 64
 
 
 def remove_green_background(frame: Image.Image) -> Image.Image:
@@ -31,7 +33,25 @@ def fit_frame(frame: Image.Image) -> Image.Image:
     canvas = Image.new("RGB", OUTPUT_SIZE, BACKGROUND)
     offset = ((OUTPUT_SIZE[0] - cropped.width) // 2, (OUTPUT_SIZE[1] - cropped.height) // 2)
     canvas.paste(cropped, offset, cropped)
-    return canvas
+    return canvas.quantize(
+        colors=PALETTE_COLORS,
+        method=Image.Quantize.MEDIANCUT,
+        dither=Image.Dither.NONE,
+    )
+
+
+def compact_frames(source: Image.Image) -> tuple[list[Image.Image], list[int]]:
+    frames: list[Image.Image] = []
+    durations: list[int] = []
+    pending_duration = 0
+    for index, frame in enumerate(ImageSequence.Iterator(source)):
+        pending_duration += frame.info.get("duration", 50)
+        if index % FRAME_STEP != FRAME_STEP - 1 and index + 1 < source.n_frames:
+            continue
+        frames.append(fit_frame(frame))
+        durations.append(pending_duration)
+        pending_duration = 0
+    return frames, durations
 
 
 def main() -> None:
@@ -42,8 +62,7 @@ def main() -> None:
     source = Image.open(source_path)
     if source.size != SOURCE_SIZE:
         raise SystemExit(f"unexpected source dimensions: {source.size}, expected {SOURCE_SIZE}")
-    frames = [fit_frame(frame) for frame in ImageSequence.Iterator(source)]
-    durations = [frame.info.get("duration", 50) for frame in ImageSequence.Iterator(source)]
+    frames, durations = compact_frames(source)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frames[0].save(
         output_path,

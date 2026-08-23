@@ -17,8 +17,12 @@ test('bundled dsh-pet maid role pack is valid and fits ESP32 limits', () => {
   const pack = validateRolePack(readdirSync(root).map(path => wire(path, readFileSync(`${root}${path}`))))
   assert.equal(pack.manifest.name, 'dsh-pet-maid')
   assert.equal(pack.manifest.mode, 'gif')
-  assert.ok(pack.totalBytes < 1_800_000)
+  assert.ok(pack.totalBytes < 700_000)
   assert.ok(pack.files.some(file => file.path === 'NOTICE.txt'))
+  assert.deepEqual(
+    pack.files.filter(file => file.path.endsWith('.gif')).map(file => file.path).sort(),
+    ['attention.gif', 'busy.gif', 'idle.gif', 'sleep.gif'],
+  )
 })
 
 test('role-pack validation matches firmware naming and size constraints', () => {
@@ -81,7 +85,9 @@ test('role-pack transfer sends one reliable command at a time and validates cumu
     wire('idle.gif', idle),
   ])
   assert.equal(result.phase, 'completed')
-  assert.equal(commands.filter(item => item.cmd === 'chunk').length, 3)
+  const chunks = commands.filter(item => item.cmd === 'chunk')
+  assert.equal(chunks.length, 2)
+  assert.ok(chunks.every(item => Buffer.from(item.d as string, 'base64').byteLength <= 512))
   assert.deepEqual(commands.slice(0, 4).map(item => item.cmd), ['file_end', 'char_end', 'char_begin', 'file'])
   assert.ok(phases.includes('installing'))
 })
