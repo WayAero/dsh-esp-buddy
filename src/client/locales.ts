@@ -1,6 +1,9 @@
 export const zh = {
   nav: 'ESP Buddy',
   'settings.title': 'ESP Buddy',
+  'settings.description': '连接 ESP32 Buddy，显示会话状态并处理硬件审批。',
+  'settings.expand': '展开设置',
+  'settings.collapse': '收起设置',
   'settings.enabled': '启用 ESP Buddy',
   'settings.enabledDesc': '关闭后停止 BLE 连接和硬件审批转发，但保留配置。',
   'status.title': '连接状态',
@@ -64,6 +67,9 @@ export type EspBuddyKey = keyof typeof zh
 export const en = {
   nav: 'ESP Buddy',
   'settings.title': 'ESP Buddy',
+  'settings.description': 'Connect an ESP32 Buddy for session status and hardware approvals.',
+  'settings.expand': 'Expand settings',
+  'settings.collapse': 'Collapse settings',
   'settings.enabled': 'Enable ESP32 Buddy',
   'settings.enabledDesc': 'Turning this off stops BLE and hardware approval forwarding while preserving configuration.',
   'status.title': 'Connection status',

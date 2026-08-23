@@ -34,6 +34,7 @@ const helperStatusKeys = {
 
 export function EspBuddySection({ useScope, readStatus, reconnect, installRolePack, setSetting, t }: EspBuddySectionProps) {
   const config = useScope(snapshot => snapshot.value)
+  const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<EspBuddyStatus>()
   const [statusError, setStatusError] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle')
@@ -102,8 +103,27 @@ export function EspBuddySection({ useScope, readStatus, reconnect, installRolePa
   }
 
   return (
-    <section className="dsh_espBuddy_section" aria-labelledby="dsh-esp-buddy-settings-title">
-      <h2 id="dsh-esp-buddy-settings-title" className="dsh_espBuddy_title">{t('settings.title')}</h2>
+    <li className={open ? 'dsh_espBuddy_card is-open' : 'dsh_espBuddy_card'}>
+      <button
+        type="button"
+        className="dsh_espBuddy_cardHeader"
+        aria-expanded={open}
+        aria-controls="dsh-esp-buddy-settings-body"
+        aria-label={`${t(open ? 'settings.collapse' : 'settings.expand')}：${t('settings.title')}`}
+        onClick={() => setOpen(current => !current)}
+      >
+        <span className="dsh_espBuddy_cardHeadText">
+          <span id="dsh-esp-buddy-settings-title" className="dsh_espBuddy_cardName">{t('settings.title')}</span>
+          <span className="dsh_espBuddy_cardDescription">{t('settings.description')}</span>
+        </span>
+        <svg className={open ? 'dsh_espBuddy_chevron is-open' : 'dsh_espBuddy_chevron'} viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div id="dsh-esp-buddy-settings-body" className="dsh_espBuddy_cardBody" aria-labelledby="dsh-esp-buddy-settings-title">
+          <div className="dsh_espBuddy_section">
 
       <label className="dsh_espBuddy_enableRow">
         <input
@@ -228,6 +248,9 @@ export function EspBuddySection({ useScope, readStatus, reconnect, installRolePa
           />
         </label>
       </div>
-    </section>
+          </div>
+        </div>
+      )}
+    </li>
   )
 }

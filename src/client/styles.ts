@@ -1,8 +1,18 @@
 export const STYLE_ID = 'dsh-esp-buddy-style'
 
 export const cssText = `
+.dsh_espBuddy_card { list-style:none; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-3); transition:border-color .16s,background .16s; }
+.dsh_espBuddy_card:hover { border-color:var(--dsw-alias-label-dimmed); }
+.dsh_espBuddy_card.is-open { border-color:var(--dsw-alias-label-dimmed); background:var(--dsw-alias-bg-layer-2); }
+.dsh_espBuddy_cardHeader { display:flex; align-items:center; gap:12px; width:100%; padding:14px 16px; appearance:none; border:0; border-radius:12px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.dsh_espBuddy_cardHeader:focus-visible { outline:2px solid var(--dsw-alias-brand-primary); outline-offset:-2px; }
+.dsh_espBuddy_cardHeadText { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.dsh_espBuddy_cardName { color:var(--dsw-alias-label-primary); font-size:15px; line-height:1.4; font-weight:600; }
+.dsh_espBuddy_cardDescription { color:var(--dsw-alias-label-tertiary); font-size:13px; line-height:1.5; }
+.dsh_espBuddy_chevron { flex:none; width:16px; height:16px; color:var(--dsw-alias-label-tertiary); transition:transform .16s; }
+.dsh_espBuddy_chevron.is-open { transform:rotate(180deg); }
+.dsh_espBuddy_cardBody { margin:0 16px; padding:16px 0 8px; border-top:1px solid var(--dsw-alias-border-l2); }
 .dsh_espBuddy_section { display:flex; flex-direction:column; gap:16px; min-width:0; }
-.dsh_espBuddy_title { margin:0; color:var(--dsw-alias-label-primary); font-size:18px; line-height:26px; font-weight:600; }
 .dsh_espBuddy_enableRow { display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-1); cursor:pointer; }
 .dsh_espBuddy_enableRow input, .dsh_espBuddy_toggleField input { flex:none; width:18px; height:18px; margin:2px 0 0; accent-color:var(--dsw-alias-brand-primary); cursor:pointer; }
 .dsh_espBuddy_enableRow span, .dsh_espBuddy_field span { display:flex; flex-direction:column; gap:2px; min-width:0; }
