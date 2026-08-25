@@ -9,15 +9,10 @@ export const cssText = `
 .dsh_espBuddy_pageHeader h2 { margin:0; color:var(--dsw-alias-label-primary); font-size:22px; line-height:30px; font-weight:600; }
 .dsh_espBuddy_pageHeader p { margin:6px 0 0; color:var(--dsw-alias-label-tertiary); font-size:14px; line-height:20px; }
 .dsh_espBuddy_version { display:inline-flex; align-items:center; width:max-content; margin-left:8px; padding:1px 8px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; color:var(--dsw-alias-label-tertiary); font-size:12px; font-weight:500; vertical-align:middle; }
-.dsh_espBuddy_card:hover { border-color:var(--dsw-alias-label-dimmed); }
-.dsh_espBuddy_card.is-open { border-color:var(--dsw-alias-label-dimmed); background:var(--dsw-alias-bg-layer-2); }
-.dsh_espBuddy_cardHeader { display:flex; align-items:center; gap:12px; width:100%; padding:14px 16px; appearance:none; border:0; border-radius:12px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
-.dsh_espBuddy_cardHeader:focus-visible { outline:2px solid var(--dsw-alias-brand-primary); outline-offset:-2px; }
-.dsh_espBuddy_cardHeadText { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.dsh_espBuddy_pluginCardRow { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; }
+.dsh_espBuddy_pluginCard .dsh_espBuddy_actions { flex:none; margin:0; }
+.dsh_espBuddy_pluginCardHint { margin:0 16px 14px; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px; }
 .dsh_espBuddy_cardName { color:var(--dsw-alias-label-primary); font-size:15px; line-height:1.4; font-weight:600; }
-.dsh_espBuddy_cardDescription { color:var(--dsw-alias-label-tertiary); font-size:13px; line-height:1.5; }
-.dsh_espBuddy_chevron { flex:none; width:16px; height:16px; color:var(--dsw-alias-label-tertiary); transition:transform .16s; }
-.dsh_espBuddy_chevron.is-open { transform:rotate(180deg); }
 .dsh_espBuddy_cardBody { margin:0 16px; padding:16px 0 8px; border-top:1px solid var(--dsw-alias-border-l2); }
 .dsh_espBuddy_page .dsh_espBuddy_cardBody { margin:0; padding:0; border:0; }
 .dsh_espBuddy_section { display:flex; flex-direction:column; gap:16px; min-width:0; }

@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.3.5.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.3.6.tgz
 dsh web
 ```
 
@@ -71,7 +71,8 @@ dsh web
 不改变该第三方素材的限制。
 
 示例包含 `idle.gif`、`attention.gif`、`busy.gif` 和 `sleep.gif`。新增或重新制作角色 GIF 时，以
-`84×84、≤60 帧、约 6 FPS、≤150 KB、≤64 色` 作为单文件推荐上限。此前 84×84、120 帧、
+`84×84、≤60 帧、约 6 FPS、≤150 KB、≤64 色` 作为单文件推荐上限；背景统一填充 Buddy 角色卡背景色
+`#17181C`，平坦背景不使用抖动。此前 84×84、120 帧、
 472,276 字节的 GIF 在 ESP32 实机上会伴随 LVGL lock 超时和屏幕卡死，因此不得继续作为制作规格。
 当前随包四个 GIF 为 84×84、60 帧、约 6 FPS、64 色，单文件约 148–156 KB；其中略超 150 KB 的历史产物
 后续应继续压缩。当前 ESP 固件只按固定优先级选择一个 GIF，状态驱动切换需要固件配合。
