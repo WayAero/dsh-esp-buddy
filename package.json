@@ -1,6 +1,6 @@
 {
   "name": "dsh-esp-buddy",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "DeepSeek Harness hardware bridge for ESP32-S3 Buddy",
   "type": "module",
   "main": "dist/index.js",

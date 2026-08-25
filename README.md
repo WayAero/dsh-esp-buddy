@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.3.4.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.3.5.tgz
 dsh web
 ```
 
