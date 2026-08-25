@@ -1,4 +1,6 @@
 import { fileURLToPath } from 'node:url'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -24,6 +26,22 @@ import { TYPERT_MANIFEST } from './typert.ts'
 export const name = 'dsh-esp-buddy'
 export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert']
 export { Config }
+
+const execFileAsync = promisify(execFile)
+
+async function uninstallFromCurrentProfile(): Promise<void> {
+  const profile = process.env.DSH_PROFILE?.trim() || 'web'
+  const command = process.platform === 'win32' ? 'dsh.cmd' : 'dsh'
+  try {
+    await execFileAsync(command, ['plugin', '--profile', profile, 'remove', 'dsh-esp-buddy'], {
+      windowsHide: true,
+      timeout: 120_000,
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Unable to remove dsh-esp-buddy from profile "${profile}": ${detail}`)
+  }
+}
 
 export function apply(ctx: Context, rawConfig: PluginConfig): void {
   // Cordis validates Config and fills its schema defaults before calling apply().
@@ -224,7 +242,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     if (!activeConfig.enabled) throw new Error('ESP Buddy is disabled')
     return rolePackTransfer.install(files)
   }
-  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack)
+  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack, uninstallFromCurrentProfile)
   ctx.effect(() => {
     const dispose = ctx.typert.register(TYPERT_MANIFEST)
     return () => { void dispose() }

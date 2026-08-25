@@ -72,6 +72,10 @@ export const rolePackFilesSchema = z.array(z.object({
   data: z.string(),
 }).readonly()).min(1)
 
+export const pluginUninstallSchema = z.object({
+  reloadRequired: z.literal(true),
+}).readonly()
+
 export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
   {
     id: 'dsh-esp-buddy#espBuddy/status',
@@ -119,6 +123,19 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#RolePackProgress',
       schema: rolePackProgressSchema,
+    },
+  },
+  {
+    id: 'dsh-esp-buddy#espBuddy/uninstall',
+    service: 'espBuddy',
+    namespace: 'espBuddy',
+    method: 'uninstall',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-esp-buddy#PluginUninstallResult',
+      schema: pluginUninstallSchema,
     },
   },
 ]

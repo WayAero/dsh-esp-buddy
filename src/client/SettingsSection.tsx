@@ -5,6 +5,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { EspBuddyStatus, EspBuddySettings, RolePackProgress, RolePackWireFile } from '../contract.ts'
 import { connectionTone, formatDiagnostics } from './model.ts'
 import { RolePackSection } from './RolePackSection.tsx'
+import { PLUGIN_VERSION } from './version.ts'
 
 export interface EspBuddySectionInjected {
   hooks: { scope: SettingsScope<EspBuddySettings> }
@@ -12,9 +13,14 @@ export interface EspBuddySectionInjected {
   reconnect: () => Promise<EspBuddyStatus>
   installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
   setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
+  uninstall: () => Promise<void>
 }
 
 export type EspBuddySectionProps = PropsRuntime<'settings.plugin.item'>
+  & InjectFace<EspBuddySectionInjected>
+  & PropsLocale<'esp-buddy'>
+
+export type EspBuddySettingsPageProps = PropsRuntime<'settings.section'>
   & InjectFace<EspBuddySectionInjected>
   & PropsLocale<'esp-buddy'>
 
@@ -32,13 +38,14 @@ const helperStatusKeys = {
   blocked: 'status.helper.blocked',
 } as const
 
-export function EspBuddySection({ useScope, readStatus, reconnect, installRolePack, setSetting, t }: EspBuddySectionProps) {
+export function EspBuddySection({ useScope, readStatus, reconnect, installRolePack, setSetting, uninstall, t, page = false }: EspBuddySectionProps & { page?: boolean }) {
   const config = useScope(snapshot => snapshot.value)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(page)
   const [status, setStatus] = useState<EspBuddyStatus>()
   const [statusError, setStatusError] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle')
   const [actionState, setActionState] = useState<'idle' | 'reconnecting' | 'reconnectStarted' | 'copied' | 'failed'>('idle')
+  const [removeState, setRemoveState] = useState<'idle' | 'confirming' | 'removing' | 'removed' | 'failed'>('idle')
 
   const refresh = useCallback(async () => {
     try {
@@ -101,9 +108,28 @@ export function EspBuddySection({ useScope, readStatus, reconnect, installRolePa
     }
     resetActionLater()
   }
+  const handleRemove = async () => {
+    if (removeState !== 'confirming') {
+      setRemoveState('confirming')
+      return
+    }
+    setRemoveState('removing')
+    try {
+      await uninstall()
+      setRemoveState('removed')
+    } catch {
+      setRemoveState('failed')
+    }
+  }
 
   return (
-    <li className={open ? 'dsh_espBuddy_card is-open' : 'dsh_espBuddy_card'}>
+    <li className={`${open ? 'dsh_espBuddy_card is-open' : 'dsh_espBuddy_card'}${page ? ' dsh_espBuddy_page' : ''}`}>
+      {page ? (
+        <div className="dsh_espBuddy_pageHeader">
+          <h2 id="dsh-esp-buddy-settings-title">{t('settings.title')}<span className="dsh_espBuddy_version">v{PLUGIN_VERSION}</span></h2>
+          <p>{t('settings.description')}</p>
+        </div>
+      ) : (
       <button
         type="button"
         className="dsh_espBuddy_cardHeader"
@@ -113,13 +139,14 @@ export function EspBuddySection({ useScope, readStatus, reconnect, installRolePa
         onClick={() => setOpen(current => !current)}
       >
         <span className="dsh_espBuddy_cardHeadText">
-          <span id="dsh-esp-buddy-settings-title" className="dsh_espBuddy_cardName">{t('settings.title')}</span>
+          <span id="dsh-esp-buddy-settings-title" className="dsh_espBuddy_cardName">{t('settings.title')}<span className="dsh_espBuddy_version">v{PLUGIN_VERSION}</span></span>
           <span className="dsh_espBuddy_cardDescription">{t('settings.description')}</span>
         </span>
         <svg className={open ? 'dsh_espBuddy_chevron is-open' : 'dsh_espBuddy_chevron'} viewBox="0 0 16 16" aria-hidden="true">
           <path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
         </svg>
       </button>
+      )}
 
       {open && (
         <div id="dsh-esp-buddy-settings-body" className="dsh_espBuddy_cardBody" aria-labelledby="dsh-esp-buddy-settings-title">
@@ -247,10 +274,28 @@ export function EspBuddySection({ useScope, readStatus, reconnect, installRolePa
             }}
           />
         </label>
+        <div className="dsh_espBuddy_field">
+          <span><strong>{t('settings.manage')}</strong><small>{removeState === 'removed' ? t('settings.removed') : t('settings.manageDesc')}</small></span>
+          <div className="dsh_espBuddy_actions">
+            {removeState === 'confirming' && <button type="button" onClick={() => setRemoveState('idle')}>{t('settings.removeCancel')}</button>}
+            <button
+              type="button"
+              className="dsh_espBuddy_removeButton"
+              disabled={removeState === 'removing' || removeState === 'removed'}
+              onClick={() => { void handleRemove() }}
+            >
+              {removeState === 'removing' ? t('settings.removing') : removeState === 'confirming' ? t('settings.removeConfirm') : t('settings.remove')}
+            </button>
+          </div>
+        </div>
       </div>
           </div>
         </div>
       )}
     </li>
   )
+}
+
+export function EspBuddySettingsPage(props: EspBuddySettingsPageProps) {
+  return <EspBuddySection {...props as unknown as EspBuddySectionProps} page />
 }

@@ -5,9 +5,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 
 import type { EspBuddySettings, EspBuddyStatus, RolePackProgress, RolePackWireFile } from '../contract.ts'
-import { EspBuddySection, type EspBuddySectionInjected } from './SettingsSection.tsx'
+import { EspBuddySection, EspBuddySettingsPage, type EspBuddySectionInjected } from './SettingsSection.tsx'
 import { NS, en, zh } from './locales.ts'
 import { ESP_BUDDY_REMOTE } from './remote.ts'
+import { registerSettingsNavIcon } from './settings-nav-icon.ts'
 import { adoptStyles } from './styles.ts'
 
 export const inject = ['remote', 'slots', 'locale', 'settingsScope']
@@ -16,6 +17,7 @@ interface EspBuddyNamespaceFace {
   status(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
   reconnect(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
   installRolePack(files: readonly RolePackWireFile[]): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
+  uninstall(): Promise<{ ok: true; value: { reloadRequired: true } } | { ok: false; error: { code: string; message: string; details: object } }>
 }
 
 export function apply(ctx: ClientContext): void {
@@ -53,17 +55,38 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value
   }
+  const uninstall = async (): Promise<void> => {
+    if (remote === undefined) throw new Error('dsh-esp-buddy: runtime service is not mounted')
+    const result = await remote.uninstall()
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+  }
+  const inject = (): EspBuddySectionInjected => ({
+    hooks: { scope },
+    readStatus,
+    reconnect,
+    installRolePack,
+    setSetting: async (field, value) => { await scope.set(field, value) },
+    uninstall,
+  })
+
+  ctx.effect(
+    () => registerSettingsNavIcon(() => t('nav')),
+    'dsh-esp-buddy: settings navigation icon',
+  )
+
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'esp-buddy',
+    order: 200,
+    label: () => t('nav'),
+    locale: NS,
+    inject,
+  }, EspBuddySettingsPage))
 
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     key: 'esp-buddy',
     locale: NS,
-    inject: (): EspBuddySectionInjected => ({
-      hooks: { scope },
-      readStatus,
-      reconnect,
-      installRolePack,
-      setSetting: async (field, value) => { await scope.set(field, value) },
-    }),
+    inject,
   }, EspBuddySection))
 }
