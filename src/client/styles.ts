@@ -42,7 +42,6 @@ export const cssText = `
 .dsh_espBuddy_actions button:disabled { cursor:not-allowed; opacity:.55; }
 .dsh_espBuddy_actionState { color:var(--dsw-alias-state-success-primary); font-size:12px; }
 .dsh_espBuddy_actionState.is-failed { color:var(--dsw-alias-state-error-primary); }
-.dsh_espBuddy_actionHint { margin:8px 0 0; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px; }
 .dsh_espBuddy_removeButton { color:var(--dsw-alias-state-error-primary) !important; }
 [data-dsh-esp-buddy-settings-nav] > svg:first-child { display:none; }
 [data-dsh-esp-buddy-settings-nav]::before { content:''; flex:none; width:16px; height:16px; background:center / contain no-repeat url('${navigationIcon}'); }

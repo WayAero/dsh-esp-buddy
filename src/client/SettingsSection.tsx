@@ -100,7 +100,7 @@ function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRoleP
       const current = await readStatus()
       setStatus(current)
       setStatusError(false)
-      await navigator.clipboard.writeText(formatDiagnostics(current, config))
+      await navigator.clipboard.writeText(formatDiagnostics(current, config, undefined, PLUGIN_VERSION))
       setActionState('copied')
     } catch {
       setActionState('failed')
@@ -174,7 +174,6 @@ function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRoleP
             </span>
           )}
         </div>
-        <p className="dsh_espBuddy_actionHint">{t('action.copyHint')}</p>
       </div>
 
       <RolePackSection

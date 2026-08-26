@@ -33,12 +33,17 @@ test('connection tone distinguishes initial, connected, failed, and later-discon
   assert.equal(connectionTone(undefined, true), 'error')
 })
 
-test('diagnostics include status and non-secret settings in a stable text envelope', () => {
-  const text = formatDiagnostics(baseStatus, settings, '2026-08-22T10:00:00.000Z')
-  assert.match(text, /^dsh-esp-buddy diagnostics/m)
-  assert.match(text, /generatedAt: 2026-08-22T10:00:00.000Z/)
-  assert.match(text, /"deviceNamePrefix": "Claude"/)
-  assert.match(text, /"everConnected": false/)
+test('diagnostics provide concise status, safe configuration, and actionable next steps', () => {
+  const text = formatDiagnostics({ ...baseStatus, lastError: 'Buddy device not found' }, settings, '2026-08-22T10:00:00.000Z', '0.3.7')
+  assert.match(text, /^ESP Buddy 诊断信息/m)
+  assert.match(text, /生成时间 \(UTC\): 2026-08-22T10:00:00.000Z/)
+  assert.match(text, /插件版本: 0.3.7/)
+  assert.match(text, /连接状态: 未连接（尚未连接成功）/)
+  assert.match(text, /最近错误: Buddy device not found/)
+  assert.match(text, /设备名前缀: Claude/)
+  assert.match(text, /确认 ESP32 已上电并处于可发现状态/)
+  assert.match(text, /未包含会话内容、审批内容或角色包文件数据。/)
+  assert.doesNotMatch(text, /"deviceNamePrefix"/)
 })
 
 test('remote contract exposes status, reconnect, role-pack install, and uninstall under one namespace', () => {
