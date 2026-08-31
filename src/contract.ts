@@ -12,20 +12,32 @@ export interface RolePackWireFile {
 }
 
 export interface RolePackProgress {
-  readonly phase: 'idle' | 'validating' | 'sending' | 'installing' | 'completed' | 'failed'
+  readonly phase: 'idle' | 'validating' | 'sending' | 'installing' | 'cancelling' | 'completed' | 'cancelled' | 'failed'
   readonly packName?: string
   readonly file?: string
   readonly sentBytes: number
   readonly totalBytes: number
+  readonly protocolVersion?: 2
+  readonly windowSize?: number
+  readonly bytesPerSecond?: number
+  readonly remainingMs?: number
+  readonly fileIndex?: number
+  readonly fileCount?: number
   readonly error?: string
 }
 
 export const rolePackProgressSchema = z.object({
-  phase: z.enum(['idle', 'validating', 'sending', 'installing', 'completed', 'failed']),
+  phase: z.enum(['idle', 'validating', 'sending', 'installing', 'cancelling', 'completed', 'cancelled', 'failed']),
   packName: z.string().optional(),
   file: z.string().optional(),
   sentBytes: z.number().int().nonnegative(),
   totalBytes: z.number().int().nonnegative(),
+  protocolVersion: z.literal(2).optional(),
+  windowSize: z.number().int().min(1).max(4).optional(),
+  bytesPerSecond: z.number().nonnegative().optional(),
+  remainingMs: z.number().int().nonnegative().optional(),
+  fileIndex: z.number().int().nonnegative().optional(),
+  fileCount: z.number().int().positive().optional(),
   error: z.string().optional(),
 }).readonly()
 
@@ -42,6 +54,7 @@ export interface EspBuddyStatus {
   readonly lastTxAt?: string
   readonly lastError?: string
   readonly rolePack: RolePackProgress
+  readonly lastInstalledRolePack?: string
   readonly sessions: number
   readonly running: number
   readonly waiting: number
@@ -61,6 +74,7 @@ export const espBuddyStatusSchema = z.object({
   lastTxAt: z.string().optional(),
   lastError: z.string().optional(),
   rolePack: rolePackProgressSchema,
+  lastInstalledRolePack: z.string().optional(),
   sessions: z.number().int().nonnegative(),
   running: z.number().int().nonnegative(),
   waiting: z.number().int().nonnegative(),
@@ -119,6 +133,19 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
         schema: rolePackFilesSchema,
       },
     }],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-esp-buddy#RolePackProgress',
+      schema: rolePackProgressSchema,
+    },
+  },
+  {
+    id: 'dsh-esp-buddy#espBuddy/cancelRolePack',
+    service: 'espBuddy',
+    namespace: 'espBuddy',
+    method: 'cancelRolePack',
+    invocation: { kind: 'direct' },
+    parameters: [],
     result: {
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#RolePackProgress',

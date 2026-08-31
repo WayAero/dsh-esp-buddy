@@ -1,4 +1,4 @@
-export type RolePackCommand = 'char_begin' | 'file' | 'chunk' | 'file_end' | 'char_end'
+export type RolePackCommand = 'char_begin' | 'file' | 'chunk' | 'file_end' | 'char_end' | 'char_abort'
 
 export interface CommandAck {
   readonly ack: RolePackCommand
@@ -76,7 +76,7 @@ export function parseCommandAck(line: string): CommandAck | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value) || !('ack' in value)) return undefined
 
   const record = value as Record<string, unknown>
-  if (!['char_begin', 'file', 'chunk', 'file_end', 'char_end'].includes(String(record.ack))) {
+  if (!['char_begin', 'file', 'chunk', 'file_end', 'char_end', 'char_abort'].includes(String(record.ack))) {
     throw new Error('Invalid role-pack ACK command')
   }
   if (typeof record.ok !== 'boolean') throw new Error('Role-pack ACK ok must be boolean')

@@ -94,6 +94,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
   let lastTxAt: string | undefined
   let lastError: string | undefined
   let rolePackProgress: RolePackProgress = { phase: 'idle', sentBytes: 0, totalBytes: 0 }
+  let lastInstalledRolePack: string | undefined
   let stopHeartbeat: (() => void) | undefined
   let stopStateListener: (() => void) | undefined
 
@@ -102,7 +103,14 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     ackRouter,
     isConnected: () => buddyConnected,
     sendReliable: line => helper?.sendBuddyLine(line, 'reliable') ?? false,
-    onProgress: progress => { rolePackProgress = progress },
+    onProgress: progress => {
+      if (progress.phase === 'completed') {
+        lastInstalledRolePack = progress.packName
+        rolePackProgress = { phase: 'idle', sentBytes: 0, totalBytes: 0 }
+      } else {
+        rolePackProgress = progress
+      }
+    },
     onSettled: () => sendSnapshot(),
   })
 
@@ -145,6 +153,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
           buddyConnected = event.connected
           if (!event.connected) ackRouter.disconnect()
           if (event.connected) everConnected = true
+          if (event.connected && ['completed', 'cancelled', 'failed'].includes(rolePackProgress.phase)) {
+            rolePackProgress = { phase: 'idle', sentBytes: 0, totalBytes: 0 }
+          }
           buddyDevice = event.connected ? event.device : undefined
           buddyMtu = event.connected ? event.mtu : undefined
           if (event.connected) lastError = undefined
@@ -225,6 +236,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
       ...(lastTxAt === undefined ? {} : { lastTxAt }),
       ...(lastError === undefined ? {} : { lastError }),
       rolePack: rolePackProgress,
+      ...(lastInstalledRolePack === undefined ? {} : { lastInstalledRolePack }),
       sessions: current.total,
       running: current.running,
       waiting: current.waiting,
@@ -242,7 +254,8 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     if (!activeConfig.enabled) throw new Error('ESP Buddy is disabled')
     return rolePackTransfer.install(files)
   }
-  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack, uninstallFromCurrentProfile)
+  const cancelRolePack = (): RolePackProgress => rolePackTransfer.cancel()
+  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack, cancelRolePack, uninstallFromCurrentProfile)
   ctx.effect(() => {
     const dispose = ctx.typert.register(TYPERT_MANIFEST)
     return () => { void dispose() }

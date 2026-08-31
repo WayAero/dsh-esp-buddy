@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a compact, display-safe ESP32 GIF from an authorized dsh-pet preview."""
+"""Build a compact ESP32 GIF with the Buddy card background (#17181C)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from PIL import Image, ImageSequence
 SOURCE_SIZE = (220, 124)
 CROP_BOX = (50, 0, 170, 124)
 OUTPUT_SIZE = (84, 84)
-BACKGROUND = (32, 41, 54)
+# Keep the opaque GIF canvas visually continuous with the ESP32 Buddy card.
+BACKGROUND = (23, 24, 28)  # #17181C
 FRAME_STEP = 2
 PALETTE_COLORS = 64
 

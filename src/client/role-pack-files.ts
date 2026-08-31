@@ -6,6 +6,8 @@ export interface SelectedRolePackFile {
 }
 
 const MAX_TOTAL_BYTES = 1_800_000
+const MAX_FILE_BYTES = 163_840
+const GIF_FILE_NAMES = new Set(['idle.gif', 'busy.gif', 'attention.gif', 'sleep.gif'])
 
 function leafPath(relativePath: string): string {
   const parts = relativePath.split('/').filter(Boolean)
@@ -55,6 +57,12 @@ export async function filesFromDrop(items: DataTransferItemList): Promise<Select
 
 export async function validateSelectedFiles(files: readonly SelectedRolePackFile[]): Promise<{ name: string; totalBytes: number }> {
   if (files.length === 0) throw new Error('角色包没有文件')
+  const seen = new Set<string>()
+  for (const item of files) {
+    if (seen.has(item.path)) throw new Error(`角色包包含重复文件：${item.path}`)
+    seen.add(item.path)
+    if (item.file.size > MAX_FILE_BYTES) throw new Error(`文件超过 163,840 字节：${item.path}`)
+  }
   const totalBytes = files.reduce((total, item) => total + item.file.size, 0)
   if (totalBytes > MAX_TOTAL_BYTES) throw new Error('角色包总大小超过 1,800,000 字节')
   const manifest = files.find(item => item.path === 'manifest.json')
@@ -63,8 +71,11 @@ export async function validateSelectedFiles(files: readonly SelectedRolePackFile
   const value = JSON.parse(await manifest.file.text()) as Record<string, unknown>
   if (typeof value.name !== 'string' || value.name.length === 0) throw new Error('manifest.json 缺少 name')
   if (value.mode !== 'gif' && value.mode !== 'text') throw new Error('manifest.json 的 mode 只能是 gif 或 text')
-  if (value.mode === 'gif' && !files.some(item => item.path === 'idle.gif' || item.path === 'idle_0.gif')) {
-    throw new Error('GIF 角色包至少需要 idle.gif')
+  if (value.mode === 'gif') {
+    if (!seen.has('idle.gif')) throw new Error('GIF 角色包至少需要 idle.gif')
+    for (const path of seen) {
+      if (path.endsWith('.gif') && !GIF_FILE_NAMES.has(path)) throw new Error(`GIF 角色包不支持文件名：${path}`)
+    }
   }
   return { name: value.name, totalBytes }
 }

@@ -17,6 +17,7 @@ interface EspBuddyNamespaceFace {
   status(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
   reconnect(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
   installRolePack(files: readonly RolePackWireFile[]): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
+  cancelRolePack(): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
   uninstall(): Promise<{ ok: true; value: { reloadRequired: true } } | { ok: false; error: { code: string; message: string; details: object } }>
 }
 
@@ -55,6 +56,12 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value
   }
+  const cancelRolePack = async (): Promise<RolePackProgress> => {
+    if (remote === undefined) throw new Error('dsh-esp-buddy: role-pack service is not mounted')
+    const result = await remote.cancelRolePack()
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
   const uninstall = async (): Promise<void> => {
     if (remote === undefined) throw new Error('dsh-esp-buddy: runtime service is not mounted')
     const result = await remote.uninstall()
@@ -65,6 +72,7 @@ export function apply(ctx: ClientContext): void {
     readStatus,
     reconnect,
     installRolePack,
+    cancelRolePack,
     setSetting: async (field, value) => { await scope.set(field, value) },
     uninstall,
   })

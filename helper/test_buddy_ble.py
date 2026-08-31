@@ -3,6 +3,8 @@ import unittest
 from types import SimpleNamespace
 
 from .buddy_ble import (
+    BuddyBleHelper,
+    HelperConfig,
     NUS_SERVICE_UUID,
     ByteLineDecoder,
     TxLineBuffer,
@@ -30,23 +32,41 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
         buffer = TxLineBuffer()
         await buffer.put("first\n")
         await buffer.put("second\n")
-        self.assertEqual(await buffer.get(), "second\n")
+        self.assertEqual(await buffer.get(), ("second\n", "latest"))
 
     async def test_reliable_lines_are_fifo_and_precede_latest(self) -> None:
         buffer = TxLineBuffer()
         await buffer.put("snapshot\n")
         await buffer.put("one\n", "reliable")
         await buffer.put("two\n", "reliable")
-        self.assertEqual(await buffer.get(), "one\n")
-        self.assertEqual(await buffer.get(), "two\n")
-        self.assertEqual(await buffer.get(), "snapshot\n")
+        self.assertEqual(await buffer.get(), ("one\n", "reliable"))
+        self.assertEqual(await buffer.get(), ("two\n", "reliable"))
+        self.assertEqual(await buffer.get(), ("snapshot\n", "latest"))
 
     async def test_disconnect_discards_reliable_but_keeps_latest_snapshot(self) -> None:
         buffer = TxLineBuffer()
         await buffer.put("snapshot\n")
         await buffer.put("stale-command\n", "reliable")
         await buffer.discard_reliable()
-        self.assertEqual(await buffer.get(), "snapshot\n")
+        self.assertEqual(await buffer.get(), ("snapshot\n", "latest"))
+
+    async def test_reliable_lines_use_write_requests_and_latest_uses_commands(self) -> None:
+        class Client:
+            is_connected = True
+
+            def __init__(self) -> None:
+                self.calls: list[tuple[bytes, bool]] = []
+
+            async def write_gatt_char(self, _uuid: str, data: bytes, response: bool) -> None:
+                self.calls.append((data, response))
+
+        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 180))
+        client = Client()
+        await helper._write_line(client, "abcdef", "reliable", 2, 2)
+        self.assertEqual(client.calls, [(b"ab", True), (b"cd", True), (b"ef", True)])
+        client.calls.clear()
+        await helper._write_line(client, "abcd", "latest", 2, 2)
+        self.assertEqual(client.calls, [(b"ab", False), (b"cd", False)])
 
 
 class UtilityTests(unittest.TestCase):

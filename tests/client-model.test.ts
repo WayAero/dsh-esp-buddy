@@ -46,9 +46,9 @@ test('diagnostics provide concise status, safe configuration, and actionable nex
   assert.doesNotMatch(text, /"deviceNamePrefix"/)
 })
 
-test('remote contract exposes status, reconnect, role-pack install, and uninstall under one namespace', () => {
+test('remote contract exposes status, reconnect, role-pack install/cancel, and uninstall under one namespace', () => {
   assert.deepEqual(
     ESP_BUDDY_INVOCATIONS.map(invocation => `${invocation.namespace}/${invocation.method}`),
-    ['espBuddy/status', 'espBuddy/reconnect', 'espBuddy/installRolePack', 'espBuddy/uninstall'],
+    ['espBuddy/status', 'espBuddy/reconnect', 'espBuddy/installRolePack', 'espBuddy/cancelRolePack', 'espBuddy/uninstall'],
   )
 })

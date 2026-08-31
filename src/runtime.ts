@@ -7,6 +7,7 @@ export class EspBuddyRuntime extends TypertRemoteService {
   private readonly readStatus: () => EspBuddyStatus
   private readonly reconnectTransport: () => Promise<EspBuddyStatus>
   private readonly installRolePackTransfer: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
+  private readonly cancelRolePackTransfer: () => RolePackProgress
   private readonly uninstallPlugin: () => Promise<void>
 
   constructor(
@@ -14,12 +15,14 @@ export class EspBuddyRuntime extends TypertRemoteService {
     readStatus: () => EspBuddyStatus,
     reconnectTransport: () => Promise<EspBuddyStatus>,
     installRolePackTransfer: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>,
+    cancelRolePackTransfer: () => RolePackProgress,
     uninstallPlugin: () => Promise<void>,
   ) {
     super(ctx, 'espBuddy')
     this.readStatus = readStatus
     this.reconnectTransport = reconnectTransport
     this.installRolePackTransfer = installRolePackTransfer
+    this.cancelRolePackTransfer = cancelRolePackTransfer
     this.uninstallPlugin = uninstallPlugin
   }
 
@@ -33,6 +36,10 @@ export class EspBuddyRuntime extends TypertRemoteService {
 
   installRolePack(files: readonly RolePackWireFile[]): Promise<RolePackProgress> {
     return this.installRolePackTransfer(files)
+  }
+
+  cancelRolePack(): RolePackProgress {
+    return this.cancelRolePackTransfer()
   }
 
   async uninstall(): Promise<{ reloadRequired: true }> {

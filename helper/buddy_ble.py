@@ -94,15 +94,15 @@ class TxLineBuffer:
                 raise ProtocolError("tx.mode must be latest or reliable")
             self._condition.notify()
 
-    async def get(self) -> str:
+    async def get(self) -> tuple[str, str]:
         async with self._condition:
             await self._condition.wait_for(lambda: bool(self._reliable) or self._latest is not None)
             if self._reliable:
-                return self._reliable.popleft()
+                return self._reliable.popleft(), "reliable"
             line = self._latest
             self._latest = None
             assert line is not None
-            return line
+            return line, "latest"
 
     async def discard_reliable(self) -> None:
         async with self._condition:
@@ -253,10 +253,14 @@ class BuddyBleHelper:
                 decoder.reset()
 
         await client.start_notify(NUS_TX_UUID, notification)
-        write_size = min(
+        write_without_response_size = min(
             self._config.write_chunk_cap,
             max(20, rx_characteristic.max_write_without_response_size),
         )
+        # Bleak 3.0.2 only exposes the no-response limit. A write request is
+        # limited by ATT_MTU - 3; each request is acknowledged before the next
+        # fragment, which is required for reliable role-pack commands.
+        write_with_response_size = max(20, client.mtu_size - 3)
         emit_event({
             "type": "status",
             "connected": True,
@@ -264,7 +268,10 @@ class BuddyBleHelper:
             "mtu": client.mtu_size,
         })
 
-        tx_task = asyncio.create_task(self._tx_loop(client, write_size), name="ble-tx")
+        tx_task = asyncio.create_task(
+            self._tx_loop(client, write_without_response_size, write_with_response_size),
+            name="ble-tx",
+        )
         stop_task = asyncio.create_task(self._stop.wait(), name="ble-stop")
         disconnect_task = asyncio.create_task(self._disconnected.wait(), name="ble-disconnect")
         done, pending = await asyncio.wait(
@@ -279,18 +286,40 @@ class BuddyBleHelper:
             if exception is not None:
                 raise exception
 
-    async def _tx_loop(self, client: BleakClient, write_size: int) -> None:
+    async def _write_line(
+        self,
+        client: BleakClient,
+        line: str,
+        mode: str,
+        write_without_response_size: int,
+        write_with_response_size: int,
+    ) -> None:
+        response = mode == "reliable"
+        write_size = write_with_response_size if response else write_without_response_size
+        for chunk in chunk_bytes(line.encode("utf-8"), write_size):
+            await client.write_gatt_char(NUS_RX_UUID, chunk, response=response)
+            if WRITE_CHUNK_DELAY_SECONDS > 0 and not response:
+                await asyncio.sleep(WRITE_CHUNK_DELAY_SECONDS)
+
+    async def _tx_loop(
+        self,
+        client: BleakClient,
+        write_without_response_size: int,
+        write_with_response_size: int,
+    ) -> None:
         frame_count = 0
         while client.is_connected and not self._stop.is_set():
-            line = await self._tx.get()
-            payload = line.encode("utf-8")
-            for chunk in chunk_bytes(payload, write_size):
-                await client.write_gatt_char(NUS_RX_UUID, chunk, response=False)
-                if WRITE_CHUNK_DELAY_SECONDS > 0:
-                    await asyncio.sleep(WRITE_CHUNK_DELAY_SECONDS)
+            line, mode = await self._tx.get()
+            await self._write_line(
+                client,
+                line,
+                mode,
+                write_without_response_size,
+                write_with_response_size,
+            )
             frame_count += 1
             if frame_count == 1 or frame_count % 10 == 0:
-                LOGGER.info("tx frame count=%d bytes=%d", frame_count, len(payload))
+                LOGGER.info("tx frame count=%d mode=%s bytes=%d", frame_count, mode, len(line.encode("utf-8")))
 
     async def _disconnect(self) -> None:
         client, self._client = self._client, None

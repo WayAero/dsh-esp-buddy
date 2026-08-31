@@ -26,6 +26,10 @@ export const TYPERT_MANIFEST: TypertContribution = {
         signature: 'installRolePack(files: RolePackWireFile[]): Promise<RolePackProgress>',
       }, {
         kind: 'method',
+        name: 'cancelRolePack',
+        signature: 'cancelRolePack(): RolePackProgress',
+      }, {
+        kind: 'method',
         name: 'uninstall',
         signature: 'uninstall(): Promise<{ reloadRequired: true }>',
       }],

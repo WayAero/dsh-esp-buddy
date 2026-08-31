@@ -14,22 +14,34 @@ interface RolePackSectionProps {
   readonly connected: boolean
   readonly enabled: boolean
   readonly progress: RolePackProgress
+  readonly lastInstalledRolePack?: string
   readonly installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
+  readonly cancelRolePack: () => Promise<RolePackProgress>
   readonly t: (key: EspBuddyKey) => string
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024) return `${Math.round(bytes)} B`
   return `${(bytes / 1024).toFixed(bytes < 1024 * 100 ? 1 : 0)} KB`
 }
 
-export function RolePackSection({ connected, enabled, progress, installRolePack, t }: RolePackSectionProps) {
+function formatRate(bytesPerSecond: number | undefined): string {
+  return bytesPerSecond === undefined ? '—' : `${formatBytes(bytesPerSecond)}/s`
+}
+
+function formatRemaining(remainingMs: number | undefined): string {
+  if (remainingMs === undefined) return '—'
+  const seconds = Math.ceil(remainingMs / 1_000)
+  return seconds < 60 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`
+}
+
+export function RolePackSection({ connected, enabled, progress, lastInstalledRolePack, installRolePack, cancelRolePack, t }: RolePackSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [selected, setSelected] = useState<readonly SelectedRolePackFile[]>([])
   const [selection, setSelection] = useState<{ name: string; totalBytes: number }>()
   const [error, setError] = useState<string>()
   const [dragging, setDragging] = useState(false)
-  const active = progress.phase === 'validating' || progress.phase === 'sending' || progress.phase === 'installing'
+  const active = progress.phase === 'validating' || progress.phase === 'sending' || progress.phase === 'installing' || progress.phase === 'cancelling'
   const percent = progress.totalBytes > 0 ? Math.min(100, Math.round(progress.sentBytes * 100 / progress.totalBytes)) : 0
 
   const select = async (files: readonly SelectedRolePackFile[]) => {
@@ -55,12 +67,22 @@ export function RolePackSection({ connected, enabled, progress, installRolePack,
     }
   }
 
+  const cancel = async () => {
+    setError(undefined)
+    try {
+      await cancelRolePack()
+    } catch (cause) {
+      setError((cause as Error).message)
+    }
+  }
+
   const phaseLabel = t(`rolePack.phase.${progress.phase}` as EspBuddyKey)
   return (
     <div className="dsh_espBuddy_group">
       <div className="dsh_espBuddy_groupHeader">
         <h3>{t('rolePack.title')}</h3>
         {progress.phase !== 'idle' && <span className={`dsh_espBuddy_packPhase is-${progress.phase}`}>{phaseLabel}</span>}
+        {active && <button type="button" className="dsh_espBuddy_cancelPack" disabled={progress.phase === 'cancelling'} onClick={() => { void cancel() }}>{t('rolePack.cancel')}</button>}
       </div>
       <p className="dsh_espBuddy_groupDesc">{t('rolePack.description')}</p>
       <div
@@ -105,8 +127,13 @@ export function RolePackSection({ connected, enabled, progress, installRolePack,
         <div className="dsh_espBuddy_progress" aria-label={phaseLabel}>
           <div><span>{progress.file ?? progress.packName ?? phaseLabel}</span><strong>{percent}%</strong></div>
           <i><b style={{ width: `${percent}%` }} /></i>
+          <small>
+            {t('rolePack.rate')}: {formatRate(progress.bytesPerSecond)} · {t('rolePack.remaining')}: {formatRemaining(progress.remainingMs)}
+          </small>
+          {progress.fileCount !== undefined && <small>{t('rolePack.fileProgress')}: {progress.fileIndex ?? 0}/{progress.fileCount}</small>}
         </div>
       )}
+      {lastInstalledRolePack !== undefined && <p className="dsh_espBuddy_packInstalled">{t('rolePack.lastInstalled')}: <strong>{lastInstalledRolePack}</strong></p>}
       {active && <p className="dsh_espBuddy_packHint">{t('rolePack.waitHint')}</p>}
       {!connected && <p className="dsh_espBuddy_packHint">{t('rolePack.connectHint')}</p>}
       {(error ?? progress.error) && <p className="dsh_espBuddy_packError">{error ?? progress.error}</p>}

@@ -17,12 +17,14 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     status: () => Promise<RemoteResult<EspBuddyStatus>>
     reconnect: () => Promise<RemoteResult<EspBuddyStatus>>
     installRolePack: (files: readonly RolePackWireFile[]) => Promise<RemoteResult<RolePackProgress>>
+    cancelRolePack: () => Promise<RemoteResult<RolePackProgress>>
     uninstall: () => Promise<RemoteResult<{ reloadRequired: true }>>
   }
   interface TypertRemoteMap {
     'espBuddy/status': () => Promise<RemoteResult<EspBuddyStatus>>
     'espBuddy/reconnect': () => Promise<RemoteResult<EspBuddyStatus>>
     'espBuddy/installRolePack': (files: readonly RolePackWireFile[]) => Promise<RemoteResult<RolePackProgress>>
+    'espBuddy/cancelRolePack': () => Promise<RemoteResult<RolePackProgress>>
     'espBuddy/uninstall': () => Promise<RemoteResult<{ reloadRequired: true }>>
   }
   interface TypertRemoteNamespaceMap {

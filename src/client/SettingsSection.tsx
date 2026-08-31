@@ -12,6 +12,7 @@ export interface EspBuddySectionInjected {
   readStatus: () => Promise<EspBuddyStatus>
   reconnect: () => Promise<EspBuddyStatus>
   installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
+  cancelRolePack: () => Promise<RolePackProgress>
   setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
   uninstall: () => Promise<void>
 }
@@ -38,7 +39,7 @@ const helperStatusKeys = {
   blocked: 'status.helper.blocked',
 } as const
 
-function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRolePack, setSetting, uninstall, t }: EspBuddySectionProps) {
+function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRolePack, cancelRolePack, setSetting, uninstall, t }: EspBuddySectionProps) {
   const config = useScope(snapshot => snapshot.value)
   const [status, setStatus] = useState<EspBuddyStatus>()
   const [statusError, setStatusError] = useState(false)
@@ -180,7 +181,9 @@ function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRoleP
         connected={status?.connected ?? false}
         enabled={enabled}
         progress={status?.rolePack ?? { phase: 'idle', sentBytes: 0, totalBytes: 0 }}
+        lastInstalledRolePack={status?.lastInstalledRolePack}
         installRolePack={installRolePack}
+        cancelRolePack={cancelRolePack}
         t={t}
       />
 
