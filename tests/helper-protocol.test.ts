@@ -19,8 +19,8 @@ test('JSONL decoder reconstructs split and coalesced lines', () => {
 })
 test('Helper protocol validates both directions', () => {
   assert.equal(
-    encodeHelperCommand({ type: 'tx', line: '{"total":0}\n' }),
-    '{"type":"tx","line":"{\\"total\\":0}\\n"}\n',
+    encodeHelperCommand({ type: 'tx', line: '{"total":0}\n', mode: 'snapshot' }),
+    '{"type":"tx","line":"{\\"total\\":0}\\n","mode":"snapshot"}\n',
   )
   assert.deepEqual(
     parseHelperEvent('{"type":"status","connected":true,"mtu":185}'),

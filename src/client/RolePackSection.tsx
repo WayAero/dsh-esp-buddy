@@ -129,8 +129,8 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
           <i><b style={{ width: `${percent}%` }} /></i>
           <small>
             {t('rolePack.rate')}: {formatRate(progress.bytesPerSecond)} · {t('rolePack.remaining')}: {formatRemaining(progress.remainingMs)}
+            {progress.fileCount !== undefined && <> · {t('rolePack.fileProgress')}: {progress.fileIndex ?? 0}/{progress.fileCount}</>}
           </small>
-          {progress.fileCount !== undefined && <small>{t('rolePack.fileProgress')}: {progress.fileIndex ?? 0}/{progress.fileCount}</small>}
         </div>
       )}
       {lastInstalledRolePack !== undefined && <p className="dsh_espBuddy_packInstalled">{t('rolePack.lastInstalled')}: <strong>{lastInstalledRolePack}</strong></p>}

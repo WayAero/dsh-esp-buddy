@@ -15,10 +15,13 @@ class RolePackTransferCancelledError extends Error {
 export interface RolePackTransferOptions {
   readonly ackRouter: CommandAckRouter
   readonly isConnected: () => boolean
-  readonly sendReliable: (line: string) => boolean
+  readonly sendControl: (line: string) => boolean
+  readonly sendBulk: (line: string) => boolean
+  readonly onWindowAck: () => void
   readonly onProgress: (progress: RolePackProgress) => void
   readonly onSettled: () => void
   readonly ackTimeoutMs?: number
+  readonly now?: () => number
 }
 
 export function crc32IsoHdlc(data: Buffer): number {
@@ -34,14 +37,22 @@ export class RolePackTransferManager {
   private readonly options: RolePackTransferOptions
   private active = false
   private cancelRequested = false
+  private snapshotDispatchAllowed = true
   private lastProgress: RolePackProgress = { phase: 'idle', sentBytes: 0, totalBytes: 0 }
+  private readonly now: () => number
+  private speedSamples: Array<{ at: number; sentBytes: number }> = []
 
   constructor(options: RolePackTransferOptions) {
     this.options = options
+    this.now = options.now ?? Date.now
   }
 
   isActive(): boolean {
     return this.active
+  }
+
+  canDispatchSnapshot(): boolean {
+    return !this.active || this.snapshotDispatchAllowed
   }
 
   cancel(): RolePackProgress {
@@ -56,6 +67,7 @@ export class RolePackTransferManager {
     if (this.active) throw new Error('已有角色包正在发送')
     this.active = true
     this.cancelRequested = false
+    this.snapshotDispatchAllowed = false
     this.report({ phase: 'validating', sentBytes: 0, totalBytes: 0, protocolVersion: ROLE_PACK_TRANSFER_VERSION })
     let pack: ValidatedRolePack | undefined
     let sentBytes = 0
@@ -70,7 +82,8 @@ export class RolePackTransferManager {
       const windowSize = this.validateWindowSize(begin.n)
       transferStarted = true
       this.throwIfCancellationRequested()
-      const startedAt = Date.now()
+      const startedAt = this.now()
+      this.speedSamples = [{ at: startedAt, sentBytes: 0 }]
       this.report({
         phase: 'sending', packName: pack.manifest.name, sentBytes, totalBytes: pack.totalBytes,
         protocolVersion: ROLE_PACK_TRANSFER_VERSION, windowSize,
@@ -129,6 +142,8 @@ export class RolePackTransferManager {
       throw error
     } finally {
       this.active = false
+      this.snapshotDispatchAllowed = true
+      this.speedSamples = []
       this.options.onSettled()
     }
   }
@@ -145,11 +160,17 @@ export class RolePackTransferManager {
       for (let offset = start; offset < end; offset += RAW_CHUNK_BYTES) {
         const chunk = data.subarray(offset, Math.min(offset + RAW_CHUNK_BYTES, end))
         const line = `${JSON.stringify({ cmd: 'chunk', offset, d: chunk.toString('base64') })}\n`
-        if (!this.options.sendReliable(line)) return false
+        if (!this.options.sendBulk(line)) return false
       }
       return true
     })
     this.assertAck('chunk', ack, end)
+    this.snapshotDispatchAllowed = true
+    try {
+      this.options.onWindowAck()
+    } finally {
+      this.snapshotDispatchAllowed = false
+    }
   }
 
   private reportSending(
@@ -160,8 +181,13 @@ export class RolePackTransferManager {
     windowSize: number,
     completedFiles: number,
   ): void {
-    const elapsedMs = Math.max(1, Date.now() - startedAt)
-    const bytesPerSecond = sentBytes * 1_000 / elapsedMs
+    const now = this.now()
+    this.speedSamples.push({ at: now, sentBytes })
+    const windowStartedAt = now - 5_000
+    while (this.speedSamples.length > 1 && this.speedSamples[1].at <= windowStartedAt) this.speedSamples.shift()
+    const sample = this.speedSamples[0] ?? { at: startedAt, sentBytes: 0 }
+    const elapsedMs = Math.max(1, now - sample.at)
+    const bytesPerSecond = Math.max(0, sentBytes - sample.sentBytes) * 1_000 / elapsedMs
     const remainingMs = bytesPerSecond === 0 ? 0 : Math.ceil((pack.totalBytes - sentBytes) * 1_000 / bytesPerSecond)
     this.report({
       phase: 'sending', packName: pack.manifest.name, file, sentBytes, totalBytes: pack.totalBytes,
@@ -186,7 +212,7 @@ export class RolePackTransferManager {
   ): Promise<CommandAck> {
     this.assertConnected()
     const line = `${JSON.stringify(body)}\n`
-    const ack = await this.options.ackRouter.waitFor(body.cmd, () => this.options.sendReliable(line), timeoutMs ?? this.options.ackTimeoutMs)
+    const ack = await this.options.ackRouter.waitFor(body.cmd, () => this.options.sendControl(line), timeoutMs ?? this.options.ackTimeoutMs)
     this.assertAck(body.cmd, ack, expectedN)
     return ack
   }

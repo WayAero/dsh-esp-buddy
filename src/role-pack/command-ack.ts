@@ -27,7 +27,7 @@ export class CommandAckRouter {
         reject(new Error(`${command} ACK timeout`))
       }, timeoutMs)
       this.pending = { command, resolve, reject, timer }
-      if (!send()) this.rejectPending(new Error('BLE Helper is not ready for reliable TX'))
+      if (!send()) this.rejectPending(new Error('BLE Helper is not ready for role-pack TX'))
     })
   }
 

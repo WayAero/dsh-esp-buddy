@@ -47,3 +47,19 @@ test('SessionManager builds baseline and preserves B running when A becomes idle
     entries: ['session- idle'],
   })
 })
+
+test('SessionManager keeps a session running while any of its agents runs', () => {
+  const shared = session('session-shared')
+  const first = { id: 'agent-one', status: 'running' as const, session: shared }
+  const second = { id: 'agent-two', status: 'running' as const, session: shared }
+  const ctx = fakeContext([shared], [first, second])
+  const manager = new SessionManager(ctx as never, () => undefined)
+  manager.start()
+
+  first.status = 'idle'
+  ctx.emit('agent/status', { agent: first, status: 'idle' })
+  assert.equal(manager.summary().running, 1)
+
+  ctx.emit('agent/disposed', { agent: second })
+  assert.equal(manager.summary().running, 0)
+})

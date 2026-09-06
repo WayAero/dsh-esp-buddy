@@ -102,7 +102,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
   const rolePackTransfer = new RolePackTransferManager({
     ackRouter,
     isConnected: () => buddyConnected,
-    sendReliable: line => helper?.sendBuddyLine(line, 'reliable') ?? false,
+    sendControl: line => helper?.sendBuddyLine(line, 'control') ?? false,
+    sendBulk: line => helper?.sendBuddyLine(line, 'bulk') ?? false,
+    onWindowAck: () => sendSnapshot(),
     onProgress: progress => {
       if (progress.phase === 'completed') {
         lastInstalledRolePack = progress.packName
@@ -115,9 +117,9 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
   })
 
   function sendSnapshot(): void {
-    if (!buddyConnected || helper === undefined || rolePackTransfer.isActive()) return
+    if (!buddyConnected || helper === undefined || !rolePackTransfer.canDispatchSnapshot()) return
     try {
-      if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), 1))) {
+      if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), 1), 'snapshot')) {
         lastTxAt = new Date().toISOString()
       } else {
         console.warn('[dsh-esp-buddy] BLE Helper is not ready for snapshot tx')

@@ -18,6 +18,7 @@ export class SessionManager {
   private readonly ctx: Context
   private readonly onChanged: () => void
   private readonly sessions = new Map<string, SessionInfo>()
+  private readonly agents = new Map<string, { sessionId: string; running: boolean }>()
   private readonly disposeListeners: Array<() => unknown> = []
   private revision = 0
 
@@ -37,6 +38,9 @@ export class SessionManager {
       }, { global: true }),
       this.ctx.on('session/disposed', session => {
         this.sessions.delete(session.id)
+        for (const [agentId, agent] of this.agents) {
+          if (agent.sessionId === session.id) this.agents.delete(agentId)
+        }
         this.onChanged()
       }, { global: true }),
       this.ctx.on('agent/created', ({ agent }) => {
@@ -48,11 +52,8 @@ export class SessionManager {
         this.onChanged()
       }, { global: true }),
       this.ctx.on('agent/disposed', ({ agent }) => {
-        const current = this.sessions.get(agent.session.id)
-        if (current !== undefined) {
-          current.running = false
-          current.updatedAt = ++this.revision
-        }
+        this.agents.delete(agent.id)
+        this.refreshSession(agent.session.id)
         this.onChanged()
       }, { global: true }),
     )
@@ -73,6 +74,7 @@ export class SessionManager {
   dispose(): void {
     for (const dispose of this.disposeListeners.splice(0).reverse()) dispose()
     this.sessions.clear()
+    this.agents.clear()
   }
 
   private ensureSession(session: Session): SessionInfo {
@@ -84,8 +86,16 @@ export class SessionManager {
   }
 
   private applyAgent(agent: Agent, status: AgentStatus): void {
-    const session = this.ensureSession(agent.session)
-    session.running = status === 'running'
-    session.updatedAt = ++this.revision
+    const previous = this.agents.get(agent.id)
+    this.agents.set(agent.id, { sessionId: agent.session.id, running: status === 'running' })
+    if (previous !== undefined && previous.sessionId !== agent.session.id) this.refreshSession(previous.sessionId)
+    this.refreshSession(agent.session.id, agent.session)
+  }
+
+  private refreshSession(sessionId: string, session?: Session): void {
+    const current = session === undefined ? this.sessions.get(sessionId) : this.ensureSession(session)
+    if (current === undefined) return
+    current.running = [...this.agents.values()].some(agent => agent.sessionId === sessionId && agent.running)
+    current.updatedAt = ++this.revision
   }
 }

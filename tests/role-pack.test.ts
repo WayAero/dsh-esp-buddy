@@ -17,13 +17,17 @@ function wire(path: string, data: string | Buffer): RolePackWireFile {
 function createManager(
   router: CommandAckRouter,
   phases: Array<Record<string, unknown>>,
-  sendReliable: (line: string) => boolean,
+  sendControl: (line: string) => boolean,
+  sendBulk = sendControl,
+  onWindowAck = () => undefined,
   ackTimeoutMs?: number,
 ): RolePackTransferManager {
   return new RolePackTransferManager({
     ackRouter: router,
     isConnected: () => true,
-    sendReliable,
+    sendControl,
+    sendBulk,
+    onWindowAck,
     onProgress: progress => phases.push(progress),
     onSettled: () => undefined,
     ackTimeoutMs,
@@ -77,10 +81,14 @@ test('V2 transfer sends four chunks before one cumulative ACK and validates CRC'
   const router = new CommandAckRouter()
   const phases: Array<Record<string, unknown>> = []
   const commands: Array<Record<string, unknown>> = []
+  const modes: string[] = []
+  let windowAcks = 0
+  const snapshotDispatchAllowed: boolean[] = []
   let fileBytes = 0
   let chunksInFile = 0
   let totalBytes = 0
-  const manager = createManager(router, phases, line => {
+  const send = (line: string, mode: string) => {
+    modes.push(mode)
     const command = JSON.parse(line) as Record<string, unknown>
     commands.push(command)
     const name = command.cmd as string
@@ -102,6 +110,11 @@ test('V2 transfer sends four chunks before one cumulative ACK and validates CRC'
     const n = name === 'char_begin' ? 4 : name === 'file_end' ? fileBytes : name === 'char_end' ? totalBytes : 0
     queueMicrotask(() => router.route(JSON.stringify({ ack: name, ok: true, n })))
     return true
+  }
+  let manager!: RolePackTransferManager
+  manager = createManager(router, phases, line => send(line, 'control'), line => send(line, 'bulk'), () => {
+    windowAcks += 1
+    snapshotDispatchAllowed.push(manager.canDispatchSnapshot())
   })
   const payload = Buffer.alloc(2_049, 1)
   const result = await manager.install([
@@ -112,6 +125,10 @@ test('V2 transfer sends four chunks before one cumulative ACK and validates CRC'
   assert.deepEqual(commands.slice(0, 2).map(item => item.cmd), ['char_begin', 'file'])
   assert.equal(commands[0].v, 2)
   assert.equal(commands[0].window, 4)
+  assert.deepEqual(modes.slice(0, 2), ['control', 'control'])
+  assert.ok(modes.slice(2).includes('bulk'))
+  assert.equal(windowAcks, 3)
+  assert.deepEqual(snapshotDispatchAllowed, [true, true, true])
   assert.equal(commands.filter(item => item.cmd === 'char_abort').length, 0)
   const payloadChunks = commands.filter(item => item.cmd === 'chunk').slice(1)
   assert.equal(payloadChunks.length, 5)
@@ -205,7 +222,7 @@ test('timeout after negotiation aborts, while a BLE disconnect does not queue an
       queueMicrotask(() => timeoutRouter.route(JSON.stringify({ ack: name, ok: true, n: name === 'char_begin' ? 4 : 0 })))
     }
     return true
-  }, 1)
+  }, undefined, undefined, 1)
   await assert.rejects(timeoutManager.install([
     wire('manifest.json', '{"name":"whale","mode":"text"}'), wire('payload.bin', 'x'),
   ]), /file ACK timeout/)
@@ -218,7 +235,7 @@ test('timeout after negotiation aborts, while a BLE disconnect does not queue an
   const disconnectManager = new RolePackTransferManager({
     ackRouter: disconnectRouter,
     isConnected: () => connected,
-    sendReliable: line => {
+    sendControl: line => {
       const name = (JSON.parse(line) as Record<string, unknown>).cmd as string
       disconnectCommands.push(name)
       if (name === 'char_begin') queueMicrotask(() => disconnectRouter.route('{"ack":"char_begin","ok":true,"n":4}'))
@@ -228,6 +245,8 @@ test('timeout after negotiation aborts, while a BLE disconnect does not queue an
       })
       return true
     },
+    sendBulk: () => true,
+    onWindowAck: () => undefined,
     onProgress: progress => disconnectPhases.push(progress),
     onSettled: () => undefined,
   })

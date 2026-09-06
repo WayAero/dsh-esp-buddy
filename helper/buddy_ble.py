@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import binascii
 import json
 import logging
 import sys
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -25,8 +28,8 @@ NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 BUDDY_LINE_MAX = 4096
-DEFAULT_WRITE_CHUNK_CAP = 180
-WRITE_CHUNK_DELAY_SECONDS = 0.004
+DEFAULT_WRITE_CHUNK_CAP = 244
+WRITE_LINE_DELAY_SECONDS = 0.004
 
 LOGGER = logging.getLogger("buddy-ble")
 
@@ -77,36 +80,88 @@ class ByteLineDecoder:
 
 
 class TxLineBuffer:
-    """Reliable FIFO plus a single latest-wins snapshot slot."""
+    """Control FIFO, bulk FIFO, plus a single latest-wins snapshot slot."""
 
     def __init__(self) -> None:
         self._condition = asyncio.Condition()
-        self._latest: str | None = None
-        self._reliable: deque[str] = deque()
+        self._snapshot: str | None = None
+        self._control: deque[str] = deque()
+        self._bulk: deque[str] = deque()
 
-    async def put(self, line: str, mode: str = "latest") -> None:
+    async def put(self, line: str, mode: str = "snapshot") -> None:
         async with self._condition:
-            if mode == "reliable":
-                self._reliable.append(line)
-            elif mode == "latest":
-                self._latest = line
+            if mode == "control":
+                self._control.append(line)
+            elif mode == "bulk":
+                self._bulk.append(line)
+            elif mode == "snapshot":
+                self._snapshot = line
             else:
-                raise ProtocolError("tx.mode must be latest or reliable")
+                raise ProtocolError("tx.mode must be snapshot, control, or bulk")
             self._condition.notify()
 
     async def get(self) -> tuple[str, str]:
         async with self._condition:
-            await self._condition.wait_for(lambda: bool(self._reliable) or self._latest is not None)
-            if self._reliable:
-                return self._reliable.popleft(), "reliable"
-            line = self._latest
-            self._latest = None
-            assert line is not None
-            return line, "latest"
+            await self._condition.wait_for(lambda: bool(self._control) or self._snapshot is not None or bool(self._bulk))
+            if self._control:
+                return self._control.popleft(), "control"
+            if self._snapshot is not None:
+                line = self._snapshot
+                self._snapshot = None
+                return line, "snapshot"
+            line = self._bulk.popleft()
+            return line, "bulk"
 
-    async def discard_reliable(self) -> None:
+    async def discard_transfer(self) -> None:
         async with self._condition:
-            self._reliable.clear()
+            self._control.clear()
+            self._bulk.clear()
+
+
+@dataclass
+class TransferDiagnostics:
+    started_at: float
+    raw_payload_bytes: int = 0
+    wire_bytes: int = 0
+    att_writes: int = 0
+    with_response_writes: int = 0
+    without_response_writes: int = 0
+    write_seconds: float = 0.0
+    throttle_seconds: float = 0.0
+    scheduling_seconds: float = 0.0
+    ack_wait_seconds: float = 0.0
+    ack_wait_started_at: float | None = None
+    last_transport_at: float | None = None
+
+    def summary(self, reason: str) -> str:
+        elapsed = max(0.001, time.monotonic() - self.started_at)
+        raw_kib_per_second = self.raw_payload_bytes / 1024 / elapsed
+        unaccounted = max(
+            0.0,
+            elapsed
+            - self.write_seconds
+            - self.throttle_seconds
+            - self.scheduling_seconds
+            - self.ack_wait_seconds,
+        )
+        return (
+            "role-pack transfer %s raw=%dB wire=%dB att=%d wwr=%d wwrq=%d "
+            "write=%.3fs throttle=%.3fs schedule=%.3fs ack_wait=%.3fs "
+            "unaccounted=%.3fs effective_raw=%.1fKiB/s"
+        ) % (
+            reason,
+            self.raw_payload_bytes,
+            self.wire_bytes,
+            self.att_writes,
+            self.with_response_writes,
+            self.without_response_writes,
+            self.write_seconds,
+            self.throttle_seconds,
+            self.scheduling_seconds,
+            self.ack_wait_seconds,
+            unaccounted,
+            raw_kib_per_second,
+        )
 
 
 def chunk_bytes(payload: bytes, chunk_size: int) -> list[bytes]:
@@ -136,6 +191,7 @@ class BuddyBleHelper:
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None
         self._device_failures = 0
+        self._transfer_diagnostics: TransferDiagnostics | None = None
 
     async def run(self) -> None:
         command_task = asyncio.create_task(self._command_loop(), name="ipc-command")
@@ -178,9 +234,9 @@ class BuddyBleHelper:
         payload = line[:-1].encode("utf-8")
         if len(payload) > BUDDY_LINE_MAX:
             raise ProtocolError("tx.line exceeds Buddy line limit")
-        mode = command.get("mode", "latest")
-        if mode not in ("latest", "reliable"):
-            raise ProtocolError("tx.mode must be latest or reliable")
+        mode = command.get("mode", "snapshot")
+        if mode not in ("snapshot", "control", "bulk"):
+            raise ProtocolError("tx.mode must be snapshot, control, or bulk")
         await self._tx.put(line, mode)
 
     async def _ble_loop(self) -> None:
@@ -205,8 +261,9 @@ class BuddyBleHelper:
                         self._device = None
                         self._device_failures = 0
             finally:
+                self._finish_transfer("disconnected")
                 await self._disconnect()
-                await self._tx.discard_reliable()
+                await self._tx.discard_transfer()
                 emit_event({"type": "status", "connected": False})
 
             if not self._stop.is_set():
@@ -247,6 +304,7 @@ class BuddyBleHelper:
         def notification(_characteristic: BleakGATTCharacteristic, data: bytearray) -> None:
             try:
                 for line in decoder.push(data):
+                    self._observe_ack(line)
                     emit_event({"type": "rx", "line": line})
             except (ProtocolError, UnicodeDecodeError) as error:
                 self._error(f"invalid Buddy notification: {error}")
@@ -258,9 +316,13 @@ class BuddyBleHelper:
             max(20, rx_characteristic.max_write_without_response_size),
         )
         # Bleak 3.0.2 only exposes the no-response limit. A write request is
-        # limited by ATT_MTU - 3; each request is acknowledged before the next
-        # fragment, which is required for reliable role-pack commands.
+        # limited by ATT_MTU - 3; only role-pack control commands use it.
         write_with_response_size = max(20, client.mtu_size - 3)
+        LOGGER.info(
+            "connected mtu=%d write_without_response_payload=%d",
+            client.mtu_size,
+            write_without_response_size,
+        )
         emit_event({
             "type": "status",
             "connected": True,
@@ -294,12 +356,22 @@ class BuddyBleHelper:
         write_without_response_size: int,
         write_with_response_size: int,
     ) -> None:
-        response = mode == "reliable"
+        response = mode == "control"
         write_size = write_with_response_size if response else write_without_response_size
-        for chunk in chunk_bytes(line.encode("utf-8"), write_size):
+        line_bytes = line.encode("utf-8")
+        tracks_role_pack = self._observe_role_pack_command(line, mode)
+        for chunk in chunk_bytes(line_bytes, write_size):
+            started_at = time.monotonic()
             await client.write_gatt_char(NUS_RX_UUID, chunk, response=response)
-            if WRITE_CHUNK_DELAY_SECONDS > 0 and not response:
-                await asyncio.sleep(WRITE_CHUNK_DELAY_SECONDS)
+            finished_at = time.monotonic()
+            self._record_att_write(response, started_at, finished_at, tracks_role_pack)
+        # Windows 可能将 4 ms asyncio 休眠放大为一个调度周期；每条完整 JSONL
+        # 数据块只等待一次，避免同一 V2 块的每个 ATT 分片重复等待。
+        if WRITE_LINE_DELAY_SECONDS > 0 and not response:
+            throttle_started_at = time.monotonic()
+            await asyncio.sleep(WRITE_LINE_DELAY_SECONDS)
+            self._record_throttle(time.monotonic() - throttle_started_at, tracks_role_pack)
+        self._start_ack_wait(line, mode)
 
     async def _tx_loop(
         self,
@@ -307,7 +379,6 @@ class BuddyBleHelper:
         write_without_response_size: int,
         write_with_response_size: int,
     ) -> None:
-        frame_count = 0
         while client.is_connected and not self._stop.is_set():
             line, mode = await self._tx.get()
             await self._write_line(
@@ -317,9 +388,90 @@ class BuddyBleHelper:
                 write_without_response_size,
                 write_with_response_size,
             )
-            frame_count += 1
-            if frame_count == 1 or frame_count % 10 == 0:
-                LOGGER.info("tx frame count=%d mode=%s bytes=%d", frame_count, mode, len(line.encode("utf-8")))
+
+    def _observe_role_pack_command(self, line: str, mode: str) -> bool:
+        if mode not in ("control", "bulk"):
+            return False
+        try:
+            command = json.loads(line)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(command, dict):
+            return False
+        name = command.get("cmd")
+        if name == "char_begin":
+            started_at = time.monotonic()
+            self._transfer_diagnostics = TransferDiagnostics(started_at, last_transport_at=started_at)
+        metrics = self._transfer_diagnostics
+        if metrics is None or name not in {"char_begin", "file", "chunk", "file_end", "char_end", "char_abort"}:
+            return False
+        metrics.wire_bytes += len(line.encode("utf-8"))
+        if name == "chunk" and isinstance(command.get("d"), str):
+            try:
+                metrics.raw_payload_bytes += len(base64.b64decode(command["d"], validate=True))
+            except (ValueError, binascii.Error):
+                pass
+        return True
+
+    def _record_att_write(
+        self,
+        response: bool,
+        started_at: float,
+        finished_at: float,
+        tracks_role_pack: bool,
+    ) -> None:
+        metrics = self._transfer_diagnostics
+        if metrics is None or not tracks_role_pack:
+            return
+        if metrics.last_transport_at is not None:
+            metrics.scheduling_seconds += max(0.0, started_at - metrics.last_transport_at)
+        metrics.att_writes += 1
+        metrics.write_seconds += finished_at - started_at
+        metrics.last_transport_at = finished_at
+        if response:
+            metrics.with_response_writes += 1
+        else:
+            metrics.without_response_writes += 1
+
+    def _record_throttle(self, elapsed: float, tracks_role_pack: bool) -> None:
+        metrics = self._transfer_diagnostics
+        if metrics is None or not tracks_role_pack:
+            return
+        metrics.throttle_seconds += elapsed
+        metrics.last_transport_at = time.monotonic()
+
+    def _start_ack_wait(self, line: str, mode: str) -> None:
+        if mode not in ("control", "bulk") or self._transfer_diagnostics is None:
+            return
+        try:
+            name = json.loads(line).get("cmd")
+        except (AttributeError, json.JSONDecodeError):
+            return
+        if name in {"char_begin", "file", "chunk", "file_end", "char_end", "char_abort"}:
+            self._transfer_diagnostics.ack_wait_started_at = time.monotonic()
+
+    def _observe_ack(self, line: str) -> None:
+        metrics = self._transfer_diagnostics
+        if metrics is None:
+            return
+        try:
+            ack = json.loads(line)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(ack, dict) or ack.get("ack") not in {"char_begin", "file", "chunk", "file_end", "char_end", "char_abort"}:
+            return
+        observed_at = time.monotonic()
+        if metrics.ack_wait_started_at is not None:
+            metrics.ack_wait_seconds += observed_at - metrics.ack_wait_started_at
+            metrics.ack_wait_started_at = None
+        metrics.last_transport_at = observed_at
+        if ack.get("ack") in {"char_end", "char_abort"}:
+            self._finish_transfer(str(ack.get("ack")))
+
+    def _finish_transfer(self, reason: str) -> None:
+        metrics, self._transfer_diagnostics = self._transfer_diagnostics, None
+        if metrics is not None:
+            LOGGER.info(metrics.summary(reason))
 
     async def _disconnect(self) -> None:
         client, self._client = self._client, None

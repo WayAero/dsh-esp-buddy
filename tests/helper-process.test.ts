@@ -60,8 +60,10 @@ test('process manager exchanges JSONL and stops the child gracefully', async () 
 
   assert.equal(manager.sendBuddyLine('{"total":0}\n'), true)
   assert.match(writes.join(''), /"type":"tx"/)
-  assert.equal(manager.sendBuddyLine('{"cmd":"chunk"}\n', 'reliable'), true)
-  assert.match(writes.join(''), /"mode":"reliable"/)
+  assert.equal(manager.sendBuddyLine('{"cmd":"file"}\n', 'control'), true)
+  assert.equal(manager.sendBuddyLine('{"cmd":"chunk"}\n', 'bulk'), true)
+  assert.match(writes.join(''), /"mode":"control"/)
+  assert.match(writes.join(''), /"mode":"bulk"/)
 
   await manager.stop()
   assert.equal(manager.getState(), 'stopped')

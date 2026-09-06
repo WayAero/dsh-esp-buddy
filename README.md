@@ -32,7 +32,7 @@ x64 插件直接使用 `bin/win32-x64/buddy-ble.exe`。
 在项目目录执行 `npm pack`，然后将生成的 tgz 安装到所需 DSH profile：
 
 ```powershell
-dsh plugin --profile web add .\dsh-esp-buddy-0.3.6.tgz
+dsh plugin --profile web add .\dsh-esp-buddy-0.4.0.tgz
 dsh web
 ```
 
@@ -68,8 +68,10 @@ dsh web
 不得超过 163,840，实际发送文件的原始字节总和不得超过 1,800,000；`NOTICE.txt` 可以随包保留，但不会发送。
 
 角色包只使用 V2：`char_begin` 携带 `v:2` 和窗口请求 `4`，每个窗口最多连续发送四个 512 原始字节块，
-再等待 ESP 返回累计 ACK。可靠角色包命令经 BLE write-with-response 分片发送；普通状态快照仍为
-write-without-response。旧固件若对 V2 返回 `ok:true,n:0`，插件会停止并提示升级固件，不会回退 V1。
+再等待 ESP 返回累计 ACK。`char_begin`、`file`、`file_end`、`char_end`、`char_abort` 使用 FIFO 和
+write-with-response；`chunk` 使用 FIFO 和 write-without-response。状态快照只保留最新一条，并在窗口 ACK
+后、下一窗口开始前发送，因此审批提示和必要心跳不必等待整个角色包完成。旧固件若对 V2 返回 `ok:true,n:0`，
+插件会停止并提示升级固件，不会改用 V1。
 断线、超时或负 ACK 会明确失败并清理传输；设置页可取消传输，成功后清除进度并显示当前 DSH 进程内最近安装的角色包名。
 
 发布包附带 `role-packs/dsh-pet-maid` 示例包。其动画素材来自
@@ -82,9 +84,17 @@ write-without-response。旧固件若对 V2 返回 `ok:true,n:0`，插件会停�
 `#17181C`，平坦背景不使用抖动。此前 84×84、120 帧、
 472,276 字节的 GIF 在 ESP32 实机上会伴随 LVGL lock 超时和屏幕卡死，因此不得继续作为制作规格。
 当前随包四个 GIF 为 84×84、60 帧、约 6 FPS、64 色，单文件约 148–156 KB；其中略超 150 KB 的历史产物
-后续应继续压缩。当前 ESP 固件只按固定优先级选择一个 GIF，状态驱动切换需要固件配合。
+后续应继续压缩。配套 ESP32 固件按 Buddy 状态选择固定文件名对应的动画；插件不发送 `animation` 字段。
 
-设置页显示百分比、当前文件、已完成文件数、速度和预计剩余时间；不显示协议版本或窗口值。发送期间页面会提示保持连接并耐心等待。
+Write Without Response 的 ATT 载荷在连接后取 `min(244, rx_characteristic.max_write_without_response_size)`；
+Helper 会输出本次传输的原始数据量、线上字节数、ATT 写次数、两种写入次数、BLE 写入耗时、行级节流耗时、
+调度间隙、ACK 等待耗时、未统计时间和有效原始吞吐。无响应写入只在完整 JSONL 数据块后节流一次，避免 Windows
+将每个 ATT 分片的 4 ms 休眠放大为明显传输延迟。
+设置页显示百分比、当前文件、已完成文件数、速度和预计剩余时间；速度与预计时间按最近 5 秒的已确认原始字节计算，
+不使用 Base64 或 ATT 字节数，也不显示协议版本或窗口值。发送期间页面会提示保持连接并耐心等待。
+
+2026-09-06 使用配套 V2 固件发送 `dsh-pet-maid` 的 611,680 原始字节已完成安装，实测有效原始吞吐为
+14.2 KiB/s；实际速度仍受 Windows 蓝牙适配器、连接参数和环境影响。
 
 ## 默认配置
 

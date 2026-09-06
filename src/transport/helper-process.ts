@@ -46,7 +46,7 @@ export class HelperProcessManager {
     this.spawnNow()
   }
 
-  sendBuddyLine(line: string, mode: 'latest' | 'reliable' = 'latest'): boolean {
+  sendBuddyLine(line: string, mode: 'snapshot' | 'control' | 'bulk' = 'snapshot'): boolean {
     if (this.child === undefined || this.state !== 'running' || !this.child.stdin.writable) return false
     this.child.stdin.write(encodeHelperCommand({ type: 'tx', line, mode }), 'utf8')
     return true
