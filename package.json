@@ -14,8 +14,6 @@
     "helper/buddy_ble.py",
     "helper/requirements.txt",
     "bin",
-    "docs/esp-buddy-settings-0.2.5.png",
-    "docs/esp-buddy-settings-0.3.0.png",
     "role-packs/dsh-pet-maid",
     "cordis.patch.yml",
     "README.md",
