@@ -113,11 +113,12 @@ Helper 会输出本次传输的原始数据量、线上字节数、ATT 写次数
 ```
 
 设备离线、蓝牙辅助程序启动失败或 BLE 断线不会自动拒绝工具调用；插件将审批请求交回 Harness
-继续处理。`tokens_today` 在 Harness 没有精确日统计时发送 `0`，不能视为真实零用量。
+继续处理。状态快照使用 V2，新增的 `usage`、`context` 与 `context_breakdown` 可供设备显示上下文占用。
+其中 `tokens_today` 仅为兼容旧解析保留；Harness 没有精确日统计时其值为 `0`，设备界面不得将它显示为真实日用量。
 
 ## 通信内容与处理范围
 
-- 上位机（Host）→ ESP：UTF-8 JSONL，兼容 Buddy V1，并附带可选 V2 usage/context 字段。
+- 上位机（Host）→ ESP：UTF-8 JSONL 状态快照固定使用 Buddy V2；V1 既有字段仍保留，`tokens_today` 仅供旧解析兼容。
 - ESP → 上位机：仅接受当前审批请求 ID 的 `once` 或 `deny`。
 - 多个会话的状态由 Harness 汇总；多个审批请求按收到顺序排队，屏幕一次只显示一个。
 - 蓝牙辅助程序只负责扫描、连接、NUS 收发、分片和重连，不处理会话、Token 或审批。

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  BUDDY_STATE_PROTOCOL_VERSION,
   BUDDY_LIMITS,
   BuddyProtocolError,
   parsePermissionReply,
@@ -32,7 +33,7 @@ test('V1 snapshot keeps mandatory ESP fields and uses zero for unavailable token
   assert.equal(snapshot.protocol, undefined)
 })
 test('V2 extends V1 without removing compatibility fields', () => {
-  const snapshot = JSON.parse(serializeBuddyState(completeState, 2))
+  const snapshot = JSON.parse(serializeBuddyState(completeState, BUDDY_STATE_PROTOCOL_VERSION))
 
   assert.equal(snapshot.protocol, 2)
   assert.equal(snapshot.source, 'deepseek-harness')

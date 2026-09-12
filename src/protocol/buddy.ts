@@ -10,6 +10,9 @@ export const BUDDY_LIMITS = Object.freeze({
   promptHintBytes: 44,
 })
 
+/** 当前插件发送的 Buddy 状态快照版本。 */
+export const BUDDY_STATE_PROTOCOL_VERSION = 2
+
 export class BuddyProtocolError extends Error {
   constructor(message: string) {
     super(message)
@@ -49,7 +52,7 @@ function v1Snapshot(state: BuddyState): Record<string, unknown> {
       .slice(0, BUDDY_LIMITS.entryCount)
       .map(entry => truncateUtf8(entry, BUDDY_LIMITS.entryBytes)),
     tokens: boundedCounter(state.tokens),
-    // Current ESP V1 requires this numeric field. Zero is the documented unavailable sentinel.
+    // 为兼容 ESP 的 V1 解析保留此数值字段；零表示没有精确日统计。
     tokens_today: boundedCounter(state.tokensToday ?? 0),
   }
 

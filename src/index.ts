@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-typert-registry'
 import { ApprovalManager } from './approval/approval-manager.ts'
 import { Config, type Config as PluginConfig, type ResolvedConfig } from './config.ts'
 import type { EspBuddyStatus, RolePackProgress, RolePackWireFile } from './contract.ts'
-import { parsePermissionReply, serializeBuddyState } from './protocol/buddy.ts'
+import { BUDDY_STATE_PROTOCOL_VERSION, parsePermissionReply, serializeBuddyState } from './protocol/buddy.ts'
 import { ProjectionManager } from './projection/projection-manager.ts'
 import { CommandAckRouter } from './role-pack/command-ack.ts'
 import { RolePackTransferManager } from './role-pack/transfer-manager.ts'
@@ -119,7 +119,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
   function sendSnapshot(): void {
     if (!buddyConnected || helper === undefined || !rolePackTransfer.canDispatchSnapshot()) return
     try {
-      if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), 1), 'snapshot')) {
+      if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), BUDDY_STATE_PROTOCOL_VERSION), 'snapshot')) {
         lastTxAt = new Date().toISOString()
       } else {
         console.warn('[dsh-esp-buddy] BLE Helper is not ready for snapshot tx')
