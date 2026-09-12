@@ -22,7 +22,7 @@ export interface ValidatedRolePack {
 
 const GIF_FILE_NAMES = new Set(['idle.gif', 'busy.gif', 'attention.gif', 'sleep.gif'])
 const GIF_MAX_DIMENSION = 84
-const GIF_MAX_FRAMES = 60
+const GIF_MAX_FRAMES = 80
 const GIF_MAX_COLORS = 64
 const GIF_MAX_FPS = 8
 
@@ -113,7 +113,7 @@ function validateGif(path: string, data: Buffer): void {
   if (metadata.frames > GIF_MAX_FRAMES) throw new Error(`${path} 帧数超过 ${GIF_MAX_FRAMES}`)
   if (metadata.colors > GIF_MAX_COLORS) throw new Error(`${path} 颜色数超过 ${GIF_MAX_COLORS}`)
   if (metadata.totalDelayCentiseconds > 0 && metadata.frames * 100 > metadata.totalDelayCentiseconds * GIF_MAX_FPS) {
-    throw new Error(`${path} 帧率高于约 6 FPS 的安全上限`)
+    throw new Error(`${path} 帧率高于约 8 FPS 的安全上限`)
   }
 }
 
@@ -125,7 +125,7 @@ export function validateRolePack(input: readonly RolePackWireFile[]): ValidatedR
     if (seen.has(file.path)) throw new Error(`角色包包含重复文件：${file.path}`)
     seen.add(file.path)
     const data = decodeBase64(file.data, file.path)
-    if (data.byteLength > ROLE_PACK_MAX_FILE_BYTES) throw new Error(`文件超过 163,840 字节：${file.path}`)
+    if (data.byteLength > ROLE_PACK_MAX_FILE_BYTES) throw new Error(`文件超过 229,376 字节：${file.path}`)
     return { path: file.path, data }
   })
   const manifestFile = files.find(file => file.path === 'manifest.json')

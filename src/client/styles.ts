@@ -66,8 +66,10 @@ export const cssText = `
 .dsh_espBuddy_progress > div { display:flex; justify-content:space-between; gap:12px; color:var(--dsw-alias-label-tertiary); font-size:12px; }
 .dsh_espBuddy_progress > div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh_espBuddy_progress > div strong { color:var(--dsw-alias-label-primary); font-weight:500; }
-.dsh_espBuddy_progress > i { display:block; height:4px; margin-top:7px; overflow:hidden; border-radius:2px; background:var(--dsw-alias-bg-layer-3); }
-.dsh_espBuddy_progress > i b { display:block; height:100%; border-radius:inherit; background:var(--dsw-alias-brand-primary); transition:width .18s ease; }
+.dsh_espBuddy_progress > i { display:block; height:6px; margin-top:7px; overflow:hidden; border-radius:999px; background:var(--dsw-alias-bg-layer-3); }
+.dsh_espBuddy_progress > i b { position:relative; display:block; height:100%; overflow:hidden; border-radius:inherit; background:var(--dsw-alias-brand-primary); transition:width .42s cubic-bezier(.2,.8,.2,1); will-change:width; }
+.dsh_espBuddy_progress.is-sending > i b::after { content:''; position:absolute; inset:0 auto 0 -45%; width:34%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.48),transparent); animation:dsh_espBuddy_progressSheen 1.25s ease-in-out infinite; }
+@keyframes dsh_espBuddy_progressSheen { to { transform:translateX(430%); } }
 .dsh_espBuddy_progress > small { display:block; margin-top:7px; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px; }
 .dsh_espBuddy_packInstalled { margin:12px 0 0; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px; }
 .dsh_espBuddy_packInstalled strong { color:var(--dsw-alias-label-primary); font-weight:500; }
@@ -79,6 +81,10 @@ export const cssText = `
 .dsh_espBuddy_field input:disabled { cursor:not-allowed; opacity:.55; }
 .dsh_espBuddy_save { color:var(--dsw-alias-brand-primary); font-size:12px; }
 .dsh_espBuddy_save.is-failed { color:var(--dsw-alias-label-primary); }
+@media (prefers-reduced-motion:reduce) {
+  .dsh_espBuddy_progress > i b { transition:none; }
+  .dsh_espBuddy_progress.is-sending > i b::after { animation:none; }
+}
 @media (max-width:700px) {
   .dsh_espBuddy_statusGrid { grid-template-columns:1fr; }
   .dsh_espBuddy_field { grid-template-columns:1fr; gap:8px; }

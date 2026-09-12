@@ -11,12 +11,14 @@ class FakeChild extends EventEmitter {
   readonly stdout = new PassThrough()
   readonly stderr = new PassThrough()
   readonly pid: number
+  private readonly exitOnStop: boolean
 
-  constructor(pid: number) {
+  constructor(pid: number, exitOnStop = true) {
     super()
     this.pid = pid
+    this.exitOnStop = exitOnStop
     this.stdin.on('data', chunk => {
-      if (String(chunk).includes('"type":"stop"')) queueMicrotask(() => this.emit('exit', 0, null))
+      if (this.exitOnStop && String(chunk).includes('"type":"stop"')) queueMicrotask(() => this.emit('exit', 0, null))
     })
   }
 
@@ -32,6 +34,7 @@ test('process manager exchanges JSONL and stops the child gracefully', async () 
   const children: FakeChild[] = []
   const events: HelperEvent[] = []
   const writes: string[] = []
+  const logs: Array<{ level: string, message: string }> = []
   const spawnProcess = () => {
     const child = new FakeChild(100 + children.length)
     children.push(child)
@@ -44,6 +47,7 @@ test('process manager exchanges JSONL and stops the child gracefully', async () 
     spawnProcess: spawnProcess as never,
     stopGraceMs: 50,
     onEvent: event => events.push(event),
+    onLog: (level, message) => logs.push({ level, message }),
   })
 
   manager.start()
@@ -56,6 +60,13 @@ test('process manager exchanges JSONL and stops the child gracefully', async () 
   assert.deepEqual(events.slice(0, 2), [
     { type: 'status', connected: true, mtu: 185 },
     { type: 'rx', line: '{"cmd":"permission"}' },
+  ])
+  children[0].stderr.write('[buddy-ble] INFO connected mtu=256\n')
+  children[0].stderr.write('[buddy-ble] WARNING transient scan failure\n')
+  await wait()
+  assert.deepEqual(logs.slice(-2), [
+    { level: 'info', message: '[buddy-ble] INFO connected mtu=256' },
+    { level: 'warning', message: '[buddy-ble] WARNING transient scan failure' },
   ])
 
   assert.equal(manager.sendBuddyLine('{"total":0}\n'), true)
@@ -100,5 +111,26 @@ test('process manager backs off, restarts, and blocks a crash loop', async () =>
   assert.equal(children.length, 2)
 
   await manager.stop()
+  assert.equal(manager.getState(), 'stopped')
+})
+
+test('process manager reports when graceful helper shutdown times out', async () => {
+  const logs: Array<{ level: string, message: string }> = []
+  const child = new FakeChild(300, false)
+  const manager = new HelperProcessManager({
+    executablePath: 'buddy-ble.exe',
+    spawnProcess: () => {
+      queueMicrotask(() => child.emit('spawn'))
+      return child as never
+    },
+    stopGraceMs: 1,
+    onLog: (level, message) => logs.push({ level, message }),
+  })
+
+  manager.start()
+  await wait()
+  await manager.stop()
+
+  assert.ok(logs.some(log => log.level === 'warning' && /graceful stop timed out/.test(log.message)))
   assert.equal(manager.getState(), 'stopped')
 })

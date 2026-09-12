@@ -29,7 +29,8 @@ NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 BUDDY_LINE_MAX = 4096
 DEFAULT_WRITE_CHUNK_CAP = 244
-WRITE_LINE_DELAY_SECONDS = 0.004
+DEFAULT_WRITE_LINE_DELAY_SECONDS = 0.0
+MAX_WRITE_LINE_DELAY_SECONDS = 0.004
 
 LOGGER = logging.getLogger("buddy-ble")
 
@@ -112,8 +113,9 @@ class TxLineBuffer:
             line = self._bulk.popleft()
             return line, "bulk"
 
-    async def discard_transfer(self) -> None:
+    async def discard_pending(self) -> None:
         async with self._condition:
+            self._snapshot = None
             self._control.clear()
             self._bulk.clear()
 
@@ -180,6 +182,7 @@ class HelperConfig:
     device_name_prefix: str
     scan_timeout: float
     write_chunk_cap: int
+    write_line_delay_seconds: float
 
 
 class BuddyBleHelper:
@@ -199,10 +202,12 @@ class BuddyBleHelper:
         try:
             await self._stop.wait()
         finally:
+            # 先主动断开现有 GATT 链路。若先取消 BLE 任务再等待清理，Windows
+            # 可能在进程被父端强制结束后仍保留链路，直到 ESP 的空闲超时才释放。
+            await self._disconnect()
             command_task.cancel()
             ble_task.cancel()
             await asyncio.gather(command_task, ble_task, return_exceptions=True)
-            await self._disconnect()
 
     async def _command_loop(self) -> None:
         while not self._stop.is_set():
@@ -224,6 +229,7 @@ class BuddyBleHelper:
             raise ProtocolError("command must be an object")
         command_type = command.get("type")
         if command_type == "stop":
+            LOGGER.info("stop requested")
             self._stop.set()
             return
         if command_type != "tx":
@@ -263,7 +269,7 @@ class BuddyBleHelper:
             finally:
                 self._finish_transfer("disconnected")
                 await self._disconnect()
-                await self._tx.discard_transfer()
+                await self._tx.discard_pending()
                 emit_event({"type": "status", "connected": False})
 
             if not self._stop.is_set():
@@ -365,11 +371,11 @@ class BuddyBleHelper:
             await client.write_gatt_char(NUS_RX_UUID, chunk, response=response)
             finished_at = time.monotonic()
             self._record_att_write(response, started_at, finished_at, tracks_role_pack)
-        # Windows 可能将 4 ms asyncio 休眠放大为一个调度周期；每条完整 JSONL
+        # Windows 可能将短 asyncio 休眠放大为一个调度周期；每条完整 JSONL
         # 数据块只等待一次，避免同一 V2 块的每个 ATT 分片重复等待。
-        if WRITE_LINE_DELAY_SECONDS > 0 and not response:
+        if self._config.write_line_delay_seconds > 0 and not response:
             throttle_started_at = time.monotonic()
-            await asyncio.sleep(WRITE_LINE_DELAY_SECONDS)
+            await asyncio.sleep(self._config.write_line_delay_seconds)
             self._record_throttle(time.monotonic() - throttle_started_at, tracks_role_pack)
         self._start_ack_wait(line, mode)
 
@@ -475,11 +481,15 @@ class BuddyBleHelper:
 
     async def _disconnect(self) -> None:
         client, self._client = self._client, None
-        if client is not None and client.is_connected:
-            try:
-                await client.disconnect()
-            except Exception as error:
-                LOGGER.warning("disconnect failed: %s", error)
+        if client is None:
+            return
+        LOGGER.info("disconnecting Buddy BLE client")
+        try:
+            # 即使 Bleak 的本地连接标志已滞后，也请求 WinRT 释放远端链路。
+            await client.disconnect()
+            LOGGER.info("Buddy BLE client disconnected")
+        except Exception as error:
+            LOGGER.warning("disconnect failed: %s", error)
 
     @staticmethod
     def _error(message: str) -> None:
@@ -492,12 +502,20 @@ def parse_args(argv: list[str] | None = None) -> HelperConfig:
     parser.add_argument("--device-name-prefix", default="Claude")
     parser.add_argument("--scan-timeout", type=float, default=10.0)
     parser.add_argument("--write-chunk-cap", type=int, default=DEFAULT_WRITE_CHUNK_CAP)
+    parser.add_argument("--write-line-delay-ms", type=int, default=round(DEFAULT_WRITE_LINE_DELAY_SECONDS * 1_000))
     args = parser.parse_args(argv)
     if args.scan_timeout <= 0:
         parser.error("--scan-timeout must be positive")
     if not 20 <= args.write_chunk_cap <= 244:
         parser.error("--write-chunk-cap must be between 20 and 244")
-    return HelperConfig(args.device_name_prefix, args.scan_timeout, args.write_chunk_cap)
+    if not 0 <= args.write_line_delay_ms <= round(MAX_WRITE_LINE_DELAY_SECONDS * 1_000):
+        parser.error("--write-line-delay-ms must be between 0 and 4")
+    return HelperConfig(
+        args.device_name_prefix,
+        args.scan_timeout,
+        args.write_chunk_cap,
+        args.write_line_delay_ms / 1_000,
+    )
 
 
 async def async_main(argv: list[str] | None = None) -> None:

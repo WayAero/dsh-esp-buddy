@@ -6,7 +6,7 @@ export interface SelectedRolePackFile {
 }
 
 const MAX_TOTAL_BYTES = 1_800_000
-const MAX_FILE_BYTES = 163_840
+const MAX_FILE_BYTES = 229_376
 const GIF_FILE_NAMES = new Set(['idle.gif', 'busy.gif', 'attention.gif', 'sleep.gif'])
 
 function leafPath(relativePath: string): string {
@@ -61,7 +61,7 @@ export async function validateSelectedFiles(files: readonly SelectedRolePackFile
   for (const item of files) {
     if (seen.has(item.path)) throw new Error(`角色包包含重复文件：${item.path}`)
     seen.add(item.path)
-    if (item.file.size > MAX_FILE_BYTES) throw new Error(`文件超过 163,840 字节：${item.path}`)
+    if (item.file.size > MAX_FILE_BYTES) throw new Error(`文件超过 229,376 字节：${item.path}`)
   }
   const totalBytes = files.reduce((total, item) => total + item.file.size, 0)
   if (totalBytes > MAX_TOTAL_BYTES) throw new Error('角色包总大小超过 1,800,000 字节')

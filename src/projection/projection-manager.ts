@@ -101,8 +101,7 @@ export class ProjectionManager {
         this.onChanged()
       }, { global: true }),
       this.ctx.sessionProjections.onChanged((session, key, value) => {
-        this.applyValue(session, key, value)
-        this.onChanged()
+        if (this.applyValue(session, key, value)) this.onChanged()
       }),
     )
 
@@ -156,13 +155,15 @@ export class ProjectionManager {
     for (const [key, value] of Object.entries(snapshot.values)) this.applyValue(session, key, value)
   }
 
-  private applyValue(session: Session, key: string, value: unknown): void {
-    const state = this.sessions.get(session.id) ?? { updatedAt: 0 }
+  private applyValue(session: Session, key: string, value: unknown): boolean {
+    const state = this.sessions.get(session.id)
+    if (state === undefined) return false
     if (key === 'tokenUsage') state.tokenUsage = tokenUsage(value)
     else if (key === 'contextPressure') state.contextPressure = contextPressure(value)
     else if (key === 'contextBreakdown') state.contextBreakdown = contextBreakdown(value)
-    else return
+    else return false
     state.updatedAt = ++this.revision
     this.sessions.set(session.id, state)
+    return true
   }
 }

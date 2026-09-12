@@ -39,7 +39,7 @@ test('bundled dsh-pet maid role pack is valid and fits ESP32 V2 limits', () => {
   const pack = validateRolePack(readdirSync(root).map(path => wire(path, readFileSync(`${root}${path}`))))
   assert.equal(pack.manifest.name, 'dsh-pet-maid')
   assert.equal(pack.manifest.mode, 'gif')
-  assert.ok(pack.totalBytes < 700_000)
+  assert.ok(pack.totalBytes < 900_000)
   assert.ok(pack.files.some(file => file.path === 'NOTICE.txt'))
   assert.deepEqual(
     pack.files.filter(file => file.path.endsWith('.gif')).map(file => file.path).sort(),
@@ -62,7 +62,7 @@ test('role-pack validation enforces V2 file cap and fixed GIF names', () => {
   ]), /idle\.gif/)
   assert.throws(() => validateRolePack([
     wire('manifest.json', '{"name":"x","mode":"text"}'), wire('large.bin', Buffer.alloc(ROLE_PACK_MAX_FILE_BYTES + 1)),
-  ]), /163,840/)
+  ]), /229,376/)
 })
 
 test('CRC-32/ISO-HDLC matches its fixed test vector', () => {

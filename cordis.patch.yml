@@ -7,3 +7,4 @@
         approvalTimeoutMs: 300000
         heartbeatIntervalMs: 3000
         deviceNamePrefix: Claude
+        rolePackWriteDelayMs: 0

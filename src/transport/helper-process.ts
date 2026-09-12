@@ -76,10 +76,14 @@ export class HelperProcessManager {
     const grace = new Promise<void>(resolve => {
       timer = setTimeout(resolve, graceMs)
     })
-    await Promise.race([exited, grace])
+    const exitedGracefully = await Promise.race([
+      exited.then(() => true),
+      grace.then(() => false),
+    ])
     if (timer !== undefined) clearTimeout(timer)
 
-    if (this.child === child) {
+    if (!exitedGracefully && this.child === child) {
+      this.log('warning', `BLE Helper graceful stop timed out after ${graceMs}ms; terminating process`)
       child.kill()
       await exited
     }
@@ -125,7 +129,9 @@ export class HelperProcessManager {
 
     child.stderr.on('data', chunk => {
       const message = String(chunk).trimEnd()
-      if (message.length > 0) this.log('warning', message)
+      if (message.length === 0) return
+      const level = /^\[buddy-ble\] (INFO|WARNING|ERROR)\b/.exec(message)?.[1]
+      this.log(level === 'INFO' ? 'info' : level === 'ERROR' ? 'error' : 'warning', message)
     })
 
     child.once('spawn', () => {

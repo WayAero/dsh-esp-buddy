@@ -25,6 +25,11 @@ function fakeContext(snapshots: Map<string, Record<string, unknown>>) {
     projection(session: object, key: string, value: unknown) {
       projectionListener?.(session, key, value, 1)
     },
+    dispose(session: { id: string }) {
+      const index = sessions.findIndex(candidate => candidate.id === session.id)
+      if (index >= 0) sessions.splice(index, 1)
+      for (const listener of listeners.get('session/disposed') ?? []) listener(session)
+    },
   }
 }
 
@@ -48,4 +53,22 @@ test('ProjectionManager aggregates disjoint usage buckets without reasoning dupl
   const sessionB = { id: 'B' }
   ctx.projection(sessionB, 'contextPressure', { pressureTokens: 70, projectedTokens: 80, contextWindow: 2_000 })
   assert.deepEqual(manager.summary().context, { pressure: 70, projected: 80, window: 2_000 })
+})
+
+test('ProjectionManager ignores late updates from a disposed session', () => {
+  const snapshots = new Map([
+    ['A', { tokenUsage: { uncachedInputTokens: 10, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 40 } }],
+    ['B', { tokenUsage: { uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 } }],
+  ])
+  const ctx = fakeContext(snapshots)
+  const manager = new ProjectionManager(ctx as never, () => undefined)
+  manager.start()
+
+  ctx.dispose({ id: 'A' })
+  ctx.projection({ id: 'A' }, 'tokenUsage', {
+    uncachedInputTokens: 100, outputTokens: 200, cacheReadTokens: 300, cacheWriteTokens: 400,
+  })
+
+  assert.deepEqual(manager.summary().usage, { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 })
+  assert.equal(manager.summary().tokens, 10)
 })

@@ -46,13 +46,15 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await buffer.get(), ("one\n", "bulk"))
         self.assertEqual(await buffer.get(), ("two\n", "bulk"))
 
-    async def test_disconnect_discards_control_and_bulk_but_keeps_snapshot(self) -> None:
+    async def test_disconnect_discards_all_pending_lines(self) -> None:
         buffer = TxLineBuffer()
         await buffer.put("snapshot\n")
         await buffer.put("stale-command\n", "control")
         await buffer.put("stale-chunk\n", "bulk")
-        await buffer.discard_transfer()
-        self.assertEqual(await buffer.get(), ("snapshot\n", "snapshot"))
+        await buffer.discard_pending()
+        self.assertIsNone(buffer._snapshot)
+        self.assertEqual(len(buffer._control), 0)
+        self.assertEqual(len(buffer._bulk), 0)
 
     async def test_control_uses_write_requests_while_snapshot_and_bulk_use_commands(self) -> None:
         class Client:
@@ -64,7 +66,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
             async def write_gatt_char(self, _uuid: str, data: bytes, response: bool) -> None:
                 self.calls.append((data, response))
 
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 180))
+        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 180, 0.004))
         client = Client()
         await helper._write_line(client, "abcdef", "control", 2, 2)
         self.assertEqual(client.calls, [(b"ab", True), (b"cd", True), (b"ef", True)])
@@ -89,7 +91,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
             async def write_gatt_char(self, _uuid: str, _data: bytes, response: bool) -> None:
                 return None
 
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244))
+        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.004))
         client = Client()
         await helper._write_line(client, '{"cmd":"char_begin"}\n', "control", 244, 244)
         await helper._write_line(client, '{"total":1}\n', "snapshot", 244, 244)
@@ -101,6 +103,23 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(metrics.with_response_writes, 1)
         self.assertEqual(metrics.without_response_writes, 1)
 
+    async def test_disconnect_requests_release_even_if_local_state_is_stale(self) -> None:
+        class Client:
+            is_connected = False
+
+            def __init__(self) -> None:
+                self.disconnects = 0
+
+            async def disconnect(self) -> None:
+                self.disconnects += 1
+
+        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.004))
+        client = Client()
+        helper._client = client
+        await helper._disconnect()
+        self.assertEqual(client.disconnects, 1)
+        self.assertIsNone(helper._client)
+
 
 class UtilityTests(unittest.TestCase):
     def test_chunk_bytes(self) -> None:
@@ -110,6 +129,11 @@ class UtilityTests(unittest.TestCase):
         config = parse_args([])
         self.assertEqual(config.device_name_prefix, "Claude")
         self.assertEqual(config.write_chunk_cap, 244)
+        self.assertEqual(config.write_line_delay_seconds, 0.0)
+
+    def test_write_line_delay_accepts_comparison_values(self) -> None:
+        for delay_ms in (0, 1, 4):
+            self.assertEqual(parse_args(["--write-line-delay-ms", str(delay_ms)]).write_line_delay_seconds, delay_ms / 1_000)
 
     def test_device_filter_requires_name_and_rejects_wrong_advertised_service(self) -> None:
         device = SimpleNamespace(name="Claude-A1B2")

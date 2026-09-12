@@ -1,6 +1,6 @@
 {
   "name": "dsh-esp-buddy",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "DeepSeek Harness hardware bridge for ESP32-S3 Buddy",
   "type": "module",
   "main": "dist/index.js",
@@ -22,10 +22,9 @@
   "scripts": {
     "build": "node build.mjs",
     "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper-windows.ps1",
-    "test:hardware": "node --experimental-strip-types scripts/hardware-smoke.ts",
+    "test:hardware": "node --experimental-strip-types scripts/hardware-approval-test.ts",
     "prepare": "npm run build",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "test:phase0": "node --test --experimental-strip-types tests/phase0.test.ts",
     "test:python": "python -m unittest -v helper/test_buddy_ble.py",
     "dsh:version": "node node_modules/@deepseek-ai/dsh/lib/bin.js --version"
   },

@@ -77,8 +77,8 @@ function waitForConnected(timeoutMs: number): { promise: Promise<void>; dispose:
 
 function request(reason: string): ApprovalRequest {
   return {
-    agent: { session: { id: 'hardware-smoke' } },
-    toolName: 'hardware-smoke',
+    agent: { session: { id: 'hardware-approval-test' } },
+    toolName: 'hardware-approval-test',
     callId: reason,
     reason,
   } as ApprovalRequest

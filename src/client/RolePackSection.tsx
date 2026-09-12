@@ -42,6 +42,7 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
   const [error, setError] = useState<string>()
   const [dragging, setDragging] = useState(false)
   const active = progress.phase === 'validating' || progress.phase === 'sending' || progress.phase === 'installing' || progress.phase === 'cancelling'
+  const sending = progress.phase === 'sending'
   const percent = progress.totalBytes > 0 ? Math.min(100, Math.round(progress.sentBytes * 100 / progress.totalBytes)) : 0
 
   const select = async (files: readonly SelectedRolePackFile[]) => {
@@ -124,7 +125,7 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
       )}
 
       {progress.phase !== 'idle' && (
-        <div className="dsh_espBuddy_progress" aria-label={phaseLabel}>
+        <div className={`dsh_espBuddy_progress${sending ? ' is-sending' : ''}`} aria-label={phaseLabel}>
           <div><span>{progress.file ?? progress.packName ?? phaseLabel}</span><strong>{percent}%</strong></div>
           <i><b style={{ width: `${percent}%` }} /></i>
           <small>

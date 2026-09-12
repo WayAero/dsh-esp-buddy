@@ -23,6 +23,7 @@ const settings: EspBuddySettings = {
   approvalTimeoutMs: 300_000,
   heartbeatIntervalMs: 3_000,
   deviceNamePrefix: 'Claude',
+  rolePackWriteDelayMs: 0,
 }
 
 test('connection tone distinguishes initial, connected, failed, and later-disconnected states', () => {

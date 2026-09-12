@@ -144,7 +144,11 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     const launch = resolveHelperLaunch(packageRoot)
     helper = new HelperProcessManager({
       executablePath: launch.executablePath,
-      args: [...launch.args, '--device-name-prefix', config.deviceNamePrefix],
+      args: [
+        ...launch.args,
+        '--device-name-prefix', config.deviceNamePrefix,
+        '--write-line-delay-ms', String(config.rolePackWriteDelayMs),
+      ],
       cwd: launch.cwd,
       onEvent: event => {
         if (event.type === 'status') {
@@ -269,6 +273,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     const needsRestart = helper !== undefined && (
       next.deviceNamePrefix !== previous.deviceNamePrefix
       || next.heartbeatIntervalMs !== previous.heartbeatIntervalMs
+      || next.rolePackWriteDelayMs !== previous.rolePackWriteDelayMs
     )
     void runTransport(async () => {
       if (!next.enabled) await stopTransport()
