@@ -43,6 +43,17 @@ class MockApproval extends Service {
   }
 }
 
+// 实机脚本不启动 Web Remote，但 Host 插件仍需要 Typert 注册服务完成激活。
+class MockTypert extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'typert')
+  }
+
+  register(): () => Promise<void> {
+    return async () => undefined
+  }
+}
+
 function waitForConnected(timeoutMs: number): { promise: Promise<void>; dispose: () => void } {
   const original = console.info
   let settled = false
@@ -99,6 +110,7 @@ async function main(): Promise<void> {
   await ctx.plugin(MockSessions)
   await ctx.plugin(MockSessionProjections)
   await ctx.plugin(MockApproval)
+  await ctx.plugin(MockTypert)
 
   const connected = waitForConnected(45_000)
   const fiber = ctx.plugin(buddyPlugin, {

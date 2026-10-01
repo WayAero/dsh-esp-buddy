@@ -1,27 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 
-import type { EspBuddyStatus, EspBuddySettings, RolePackProgress, RolePackWireFile } from '../contract.ts'
+import type { EspBuddySettings, EspBuddyStatus, RolePackProgress, RolePackWireFile } from '../contract.ts'
 import { connectionTone, formatDiagnostics } from './model.ts'
 import { RolePackSection } from './RolePackSection.tsx'
 import { PLUGIN_VERSION } from './version.ts'
 
 export interface EspBuddySectionInjected {
-  hooks: { scope: SettingsScope<EspBuddySettings> }
   readStatus: () => Promise<EspBuddyStatus>
   reconnect: () => Promise<EspBuddyStatus>
   installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
   cancelRolePack: () => Promise<RolePackProgress>
-  setSetting: (field: keyof EspBuddySettings, value: boolean | number | string) => Promise<void>
-  uninstall: () => Promise<void>
 }
 
-export type EspBuddySectionProps = PropsRuntime<'settings.plugin.item'>
-  & InjectFace<EspBuddySectionInjected>
-  & PropsLocale<'esp-buddy'>
-
-export type EspBuddySettingsPageProps = PropsRuntime<'settings.section'>
+export type EspBuddySectionProps = PropsRuntime<'plugins.row.config'>
   & InjectFace<EspBuddySectionInjected>
   & PropsLocale<'esp-buddy'>
 
@@ -31,292 +24,166 @@ function displayTime(value?: string): string {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleTimeString()
 }
 
-const helperStatusKeys = {
-  stopped: 'status.helper.stopped',
-  starting: 'status.helper.starting',
-  running: 'status.helper.running',
-  backoff: 'status.helper.backoff',
-  blocked: 'status.helper.blocked',
-} as const
-
-function EspBuddySettingsContent({ useScope, readStatus, reconnect, installRolePack, cancelRolePack, setSetting, uninstall, t }: EspBuddySectionProps) {
-  const config = useScope(snapshot => snapshot.value)
+/** Plugins 页提供配置值与 revision；草稿只有点击保存后才提交。 */
+export function EspBuddyConfigPage({ view, form, readStatus, reconnect, installRolePack, cancelRolePack, t }: EspBuddySectionProps) {
+  const accepted = form?.state.value as EspBuddySettings | undefined
+  const [draft, setDraft] = useState<EspBuddySettings>()
+  const [revision, setRevision] = useState<number>()
+  const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<EspBuddyStatus>()
-  const [statusError, setStatusError] = useState(false)
-  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle')
-  const [actionState, setActionState] = useState<'idle' | 'reconnecting' | 'reconnectStarted' | 'copied' | 'failed'>('idle')
-  const [removeState, setRemoveState] = useState<'idle' | 'confirming' | 'removing' | 'removed' | 'failed'>('idle')
+  const [statusError, setStatusError] = useState<string>()
+  const [notice, setNotice] = useState<string>()
+  const [saving, setSaving] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+
+  // 未编辑时跟随 Host 快照；编辑期间保留原 revision，让 Host 拒绝并发覆盖。
+  useEffect(() => {
+    if (dirty || accepted === undefined) return
+    if (revision !== undefined && form?.state.revision === revision) return
+    setDraft({ ...accepted })
+    setRevision(form?.state.revision)
+  }, [accepted, dirty, form?.state.revision, revision])
 
   const refresh = useCallback(async () => {
     try {
       setStatus(await readStatus())
-      setStatusError(false)
-    } catch {
-      setStatusError(true)
+      setStatusError(undefined)
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : String(error))
     }
   }, [readStatus])
 
   useEffect(() => {
-    void refresh()
-    const timer = window.setInterval(() => { void refresh() }, 2_000)
-    return () => window.clearInterval(timer)
-  }, [refresh])
+    if (view !== 'page') return
+    let active = true
+    const run = async () => { if (active) await refresh() }
+    void run()
+    const timer = window.setInterval(() => { void run() }, 2_000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [refresh, view])
 
-  const write = async (field: keyof EspBuddySettings, value: boolean | number | string) => {
+  if (view === 'summary') return t('settings.description')
+  const writable = form?.state.writable === true && draft !== undefined && !saving
+  const edit = <K extends keyof EspBuddySettings>(field: K, value: EspBuddySettings[K]) => {
+    setDraft(current => current === undefined ? current : { ...current, [field]: value })
+    setDirty(true)
+    setNotice(undefined)
+  }
+  const discard = () => {
+    if (accepted === undefined) return
+    setDraft({ ...accepted })
+    setRevision(form?.state.revision)
+    setDirty(false)
+    setNotice(undefined)
+  }
+  const save = async () => {
+    if (form === undefined || draft === undefined || revision === undefined) return
+    setSaving(true)
+    setNotice(undefined)
     try {
-      await setSetting(field, value)
-      setSaveState('saved')
-      window.setTimeout(() => setSaveState('idle'), 1_500)
+      const ops = (Object.keys(draft) as (keyof EspBuddySettings)[])
+        .filter(field => draft[field] !== accepted?.[field])
+        .map(field => ({ op: 'set' as const, path: [field], value: draft[field] }))
+      if (ops.length === 0) {
+        setRevision(form.state.revision)
+        setDraft({ ...accepted! })
+        setDirty(false)
+        setNotice(t('config.saved'))
+        return
+      }
+      if (!await form.mutate(ops, revision)) throw new Error(t('config.failed'))
+      // 下次 owner 推送新快照时重新建立草稿，避免把旧 revision 用于第二次保存。
+      setDraft(undefined)
+      setDirty(false)
+      setNotice(t('config.saved'))
       await refresh()
-    } catch {
-      setSaveState('failed')
+    } catch (error) {
+      setNotice(`${t('config.failed')}：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setSaving(false)
     }
   }
-
-  const enabled = config?.enabled ?? true
-  const tone = connectionTone(status, statusError)
-  const connectionLabel = statusError
-    ? t('status.unavailable')
-    : status === undefined
-      ? t('status.loading')
-      : status.connected
-        ? t('status.connected')
-        : t('status.disconnected')
-
-  const resetActionLater = () => window.setTimeout(() => setActionState('idle'), 2_000)
   const handleReconnect = async () => {
-    setActionState('reconnecting')
+    setReconnecting(true)
     try {
       setStatus(await reconnect())
-      setStatusError(false)
-      setActionState('reconnectStarted')
-    } catch {
-      setActionState('failed')
-    }
-    resetActionLater()
+      setNotice(t('action.reconnectStarted'))
+    } catch (error) {
+      setNotice(`${t('action.failed')}：${error instanceof Error ? error.message : String(error)}`)
+    } finally { setReconnecting(false) }
   }
-  const handleCopyDiagnostics = async () => {
-    if (config === undefined) return
+  const copyDiagnostics = async () => {
+    if (accepted === undefined) return
     try {
       const current = await readStatus()
-      setStatus(current)
-      setStatusError(false)
-      await navigator.clipboard.writeText(formatDiagnostics(current, config, undefined, PLUGIN_VERSION))
-      setActionState('copied')
-    } catch {
-      setActionState('failed')
-    }
-    resetActionLater()
-  }
-  const handleRemove = async () => {
-    if (removeState !== 'confirming') {
-      setRemoveState('confirming')
-      return
-    }
-    setRemoveState('removing')
-    try {
-      await uninstall()
-      setRemoveState('removed')
-    } catch {
-      setRemoveState('failed')
+      await navigator.clipboard.writeText(formatDiagnostics(current, accepted, undefined, PLUGIN_VERSION))
+      setNotice(t('action.copied'))
+    } catch (error) {
+      setNotice(`${t('action.failed')}：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  const tone = connectionTone(status, statusError !== undefined)
+  const connectionLabel = statusError !== undefined ? t('status.unavailable')
+    : status === undefined ? t('status.loading')
+      : status.connected ? t('status.connected') : t('status.disconnected')
 
-  return (
-    <div id="dsh-esp-buddy-settings-body" className="dsh_espBuddy_cardBody" aria-labelledby="dsh-esp-buddy-settings-title">
-      <div className="dsh_espBuddy_section">
-
-      <label className="dsh_espBuddy_enableRow">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={event => { void write('enabled', event.target.checked) }}
-        />
-        <span>
-          <strong>{t('settings.enabled')}</strong>
-          <small>{t('settings.enabledDesc')}</small>
-        </span>
-      </label>
-
-      <div className="dsh_espBuddy_group">
-        <div className="dsh_espBuddy_groupHeader">
-          <h3>{t('status.title')}</h3>
-          <span className={`dsh_espBuddy_connection is-${tone}`}>
-            <i aria-hidden="true" />{connectionLabel}
-          </span>
-        </div>
-        <dl className="dsh_espBuddy_statusGrid">
-          <div><dt>{t('status.device')}</dt><dd>{status?.device ?? '—'}</dd></div>
-          <div><dt>{t('status.mtu')}</dt><dd>{status?.mtu ?? '—'}</dd></div>
-          <div><dt>{t('status.helper')}</dt><dd>{status === undefined ? '—' : t(helperStatusKeys[status.helperState])}</dd></div>
-          <div><dt>{t('status.lastStatus')}</dt><dd>{displayTime(status?.lastStatusAt)}</dd></div>
-          <div><dt>{t('status.lastRx')}</dt><dd>{displayTime(status?.lastRxAt)}</dd></div>
-          <div><dt>{t('status.lastTx')}</dt><dd>{displayTime(status?.lastTxAt)}</dd></div>
-          <div><dt>{t('status.sessions')}</dt><dd>{status?.sessions ?? '—'}</dd></div>
-          <div><dt>{t('status.running')}</dt><dd>{status?.running ?? '—'}</dd></div>
-          <div><dt>{t('status.waiting')}</dt><dd>{status?.waiting ?? '—'}</dd></div>
-          <div><dt>{t('status.tokens')}</dt><dd>{status?.tokens ?? '—'}</dd></div>
-        </dl>
-        {status?.lastError && <p className="dsh_espBuddy_error"><strong>{t('status.error')}：</strong>{status.lastError}</p>}
-        <div className="dsh_espBuddy_actions">
-          <button type="button" disabled={!enabled || actionState === 'reconnecting'} onClick={() => { void handleReconnect() }}>
-            {actionState === 'reconnecting' ? t('action.reconnecting') : t('action.reconnect')}
-          </button>
-          <button type="button" disabled={status === undefined || config === undefined} onClick={() => { void handleCopyDiagnostics() }}>
-            {t('action.copyDiagnostics')}
-          </button>
-          {actionState !== 'idle' && actionState !== 'reconnecting' && (
-            <span className={actionState === 'failed' ? 'dsh_espBuddy_actionState is-failed' : 'dsh_espBuddy_actionState'}>
-              {t(actionState === 'reconnectStarted'
-                ? 'action.reconnectStarted'
-                : actionState === 'copied'
-                  ? 'action.copied'
-                  : 'action.failed')}
-            </span>
-          )}
-        </div>
+  return <div className="dsh_espBuddy_page dsh_espBuddy_section">
+    <div className="dsh_espBuddy_group">
+      <div className="dsh_espBuddy_groupHeader"><h3>{t('status.title')}</h3>
+        <span className={`dsh_espBuddy_connection is-${tone}`}><i aria-hidden="true" />{connectionLabel}</span>
       </div>
-
-      <RolePackSection
-        connected={status?.connected ?? false}
-        enabled={enabled}
-        progress={status?.rolePack ?? { phase: 'idle', sentBytes: 0, totalBytes: 0 }}
-        lastInstalledRolePack={status?.lastInstalledRolePack}
-        installRolePack={installRolePack}
-        cancelRolePack={cancelRolePack}
-        t={t}
-      />
-
-      <div className="dsh_espBuddy_group">
-        <div className="dsh_espBuddy_groupHeader">
-          <h3>{t('config.title')}</h3>
-          {saveState !== 'idle' && (
-            <span className={saveState === 'failed' ? 'dsh_espBuddy_save is-failed' : 'dsh_espBuddy_save'}>
-              {t(saveState === 'failed' ? 'config.failed' : 'config.saved')}
-            </span>
-          )}
-        </div>
-        <label className="dsh_espBuddy_field dsh_espBuddy_toggleField">
-          <span><strong>{t('config.autoConnect')}</strong><small>{t('config.autoConnectDesc')}</small></span>
-          <input
-            type="checkbox"
-            checked={config?.autoConnect ?? true}
-            disabled={!enabled}
-            onChange={event => { void write('autoConnect', event.target.checked) }}
-          />
-        </label>
-        <label className="dsh_espBuddy_field">
-          <span><strong>{t('config.devicePrefix')}</strong><small>{t('config.devicePrefixDesc')}</small></span>
-          <input
-            key={`prefix-${config?.deviceNamePrefix ?? 'Claude'}`}
-            type="text"
-            defaultValue={config?.deviceNamePrefix ?? 'Claude'}
-            maxLength={32}
-            disabled={!enabled}
-            onBlur={event => {
-              const value = event.target.value.trim()
-              if (value.length > 0 && value !== config?.deviceNamePrefix) void write('deviceNamePrefix', value)
-            }}
-          />
-        </label>
-        <label className="dsh_espBuddy_field">
-          <span><strong>{t('config.approvalTimeout')}</strong><small>{t('config.approvalTimeoutDesc')}</small></span>
-          <input
-            key={`approval-${config?.approvalTimeoutMs ?? 300_000}`}
-            type="number"
-            min={1}
-            step={1}
-            defaultValue={(config?.approvalTimeoutMs ?? 300_000) / 1_000}
-            disabled={!enabled}
-            onBlur={event => {
-              const value = Math.max(1, Number(event.target.value)) * 1_000
-              if (Number.isFinite(value) && value !== config?.approvalTimeoutMs) void write('approvalTimeoutMs', value)
-            }}
-          />
-        </label>
-        <label className="dsh_espBuddy_field">
-          <span><strong>{t('config.heartbeat')}</strong><small>{t('config.heartbeatDesc')}</small></span>
-          <input
-            key={`heartbeat-${config?.heartbeatIntervalMs ?? 3_000}`}
-            type="number"
-            min={1}
-            step={1}
-            defaultValue={(config?.heartbeatIntervalMs ?? 3_000) / 1_000}
-            disabled={!enabled}
-            onBlur={event => {
-              const value = Math.max(1, Number(event.target.value)) * 1_000
-              if (Number.isFinite(value) && value !== config?.heartbeatIntervalMs) void write('heartbeatIntervalMs', value)
-            }}
-          />
-        </label>
-        <div className="dsh_espBuddy_field">
-          <span><strong>{t('settings.manage')}</strong><small>{removeState === 'removed' ? t('settings.removed') : t('settings.manageDesc')}</small></span>
-          <div className="dsh_espBuddy_actions">
-            {removeState === 'confirming' && <button type="button" onClick={() => setRemoveState('idle')}>{t('settings.removeCancel')}</button>}
-            <button
-              type="button"
-              className="dsh_espBuddy_removeButton"
-              disabled={removeState === 'removing' || removeState === 'removed'}
-              onClick={() => { void handleRemove() }}
-            >
-              {removeState === 'removing' ? t('settings.removing') : removeState === 'confirming' ? t('settings.removeConfirm') : t('settings.remove')}
-            </button>
-          </div>
-        </div>
+      <dl className="dsh_espBuddy_statusGrid">
+        <div><dt>{t('status.device')}</dt><dd>{status?.device ?? '—'}</dd></div>
+        <div><dt>{t('status.mtu')}</dt><dd>{status?.mtu ?? '—'}</dd></div>
+        <div><dt>{t('status.helper')}</dt><dd>{status === undefined ? '—' : t(`status.helper.${status.helperState}`)}</dd></div>
+        <div><dt>{t('status.lastStatus')}</dt><dd>{displayTime(status?.lastStatusAt)}</dd></div>
+        <div><dt>{t('status.lastRx')}</dt><dd>{displayTime(status?.lastRxAt)}</dd></div>
+        <div><dt>{t('status.lastTx')}</dt><dd>{displayTime(status?.lastTxAt)}</dd></div>
+        <div><dt>{t('status.sessions')}</dt><dd>{status?.sessions ?? '—'}</dd></div>
+        <div><dt>{t('status.running')}</dt><dd>{status?.running ?? '—'}</dd></div>
+        <div><dt>{t('status.waiting')}</dt><dd>{status?.waiting ?? '—'}</dd></div>
+        <div><dt>{t('status.tokens')}</dt><dd>{status?.tokens ?? '—'}</dd></div>
+      </dl>
+      {(status?.lastError || statusError) && <p className="dsh_espBuddy_error">{status?.lastError ?? statusError}</p>}
+      <div className="dsh_espBuddy_actions">
+        <button type="button" disabled={!status?.enabled || reconnecting} onClick={() => { void handleReconnect() }}>{t(reconnecting ? 'action.reconnecting' : 'action.reconnect')}</button>
+        <button type="button" disabled={accepted === undefined} onClick={() => { void copyDiagnostics() }}>{t('action.copyDiagnostics')}</button>
       </div>
     </div>
+    <RolePackSection connected={status?.connected ?? false} enabled={status?.enabled ?? false}
+      progress={status?.rolePack ?? { phase: 'idle', sentBytes: 0, totalBytes: 0 }}
+      lastInstalledRolePack={status?.lastInstalledRolePack} installRolePack={installRolePack} cancelRolePack={cancelRolePack} t={t} />
+    <form className="dsh_espBuddy_group" onSubmit={event => { event.preventDefault(); void save() }}>
+      <div className="dsh_espBuddy_groupHeader"><h3>{t('config.title')}</h3></div>
+      <label className="dsh_espBuddy_field dsh_espBuddy_toggleField">
+        <span><strong>{t('settings.enabled')}</strong><small>{t('settings.enabledDesc')}</small></span>
+        <input type="checkbox" checked={draft?.enabled ?? false} disabled={!writable} onChange={event => edit('enabled', event.target.checked)} />
+      </label>
+      <label className="dsh_espBuddy_field dsh_espBuddy_toggleField">
+        <span><strong>{t('config.autoConnect')}</strong><small>{t('config.autoConnectDesc')}</small></span>
+        <input type="checkbox" checked={draft?.autoConnect ?? false} disabled={!writable} onChange={event => edit('autoConnect', event.target.checked)} />
+      </label>
+      <label className="dsh_espBuddy_field">
+        <span><strong>{t('config.devicePrefix')}</strong><small>{t('config.devicePrefixDesc')}</small></span>
+        <input type="text" value={draft?.deviceNamePrefix ?? ''} maxLength={32} required disabled={!writable} onChange={event => edit('deviceNamePrefix', event.target.value)} />
+      </label>
+      <label className="dsh_espBuddy_field">
+        <span><strong>{t('config.approvalTimeout')}</strong><small>{t('config.approvalTimeoutDesc')}</small></span>
+        <input type="number" min={1} step={1} value={draft === undefined ? '' : draft.approvalTimeoutMs / 1_000} required disabled={!writable} onChange={event => edit('approvalTimeoutMs', Number(event.target.value) * 1_000)} />
+      </label>
+      <label className="dsh_espBuddy_field">
+        <span><strong>{t('config.heartbeat')}</strong><small>{t('config.heartbeatDesc')}</small></span>
+        <input type="number" min={1} max={29} step={1} value={draft === undefined ? '' : draft.heartbeatIntervalMs / 1_000} required disabled={!writable} onChange={event => edit('heartbeatIntervalMs', Number(event.target.value) * 1_000)} />
+      </label>
+      <label className="dsh_espBuddy_field">
+        <span><strong>{t('config.writeDelay')}</strong></span>
+        <input type="number" min={0} max={4} step={1} value={draft?.rolePackWriteDelayMs ?? ''} required disabled={!writable} onChange={event => edit('rolePackWriteDelayMs', Number(event.target.value))} />
+      </label>
+      <div className="dsh_espBuddy_actions"><button type="submit" disabled={!writable}>{t('config.save')}</button>
+        <button type="button" disabled={saving || accepted === undefined} onClick={discard}>{t('config.discard')}</button>
+      </div>
+      {form?.state.writable !== true && <p className="dsh_espBuddy_error">{t('config.unavailable')}</p>}
+    </form>
+    {notice && <p role="status" className="dsh_espBuddy_groupDesc">{notice}</p>}
   </div>
-  )
-}
-
-/** The Plugins page deliberately exposes management only; settings live in the external section. */
-export function EspBuddySection({ uninstall, t }: Pick<EspBuddySectionProps, 'uninstall' | 't'>) {
-  const [removeState, setRemoveState] = useState<'idle' | 'confirming' | 'removing' | 'removed' | 'failed'>('idle')
-
-  const handleRemove = async () => {
-    if (removeState !== 'confirming') {
-      setRemoveState('confirming')
-      return
-    }
-    setRemoveState('removing')
-    try {
-      await uninstall()
-      setRemoveState('removed')
-    } catch {
-      setRemoveState('failed')
-    }
-  }
-
-  return (
-    <li className="dsh_espBuddy_card dsh_espBuddy_pluginCard">
-      <div className="dsh_espBuddy_pluginCardRow">
-        <span id="dsh-esp-buddy-settings-title" className="dsh_espBuddy_cardName">{t('settings.title')}<span className="dsh_espBuddy_version">v{PLUGIN_VERSION}</span></span>
-        <div className="dsh_espBuddy_actions">
-          {removeState === 'confirming' && <button type="button" onClick={() => setRemoveState('idle')}>{t('settings.removeCancel')}</button>}
-          <button
-            type="button"
-            className="dsh_espBuddy_removeButton"
-            disabled={removeState === 'removing' || removeState === 'removed'}
-            onClick={() => { void handleRemove() }}
-          >
-            {removeState === 'removing' ? t('settings.removing') : removeState === 'confirming' ? t('settings.removeConfirm') : t('settings.remove')}
-          </button>
-        </div>
-      </div>
-      {removeState === 'removed' && <p className="dsh_espBuddy_pluginCardHint">{t('settings.removed')}</p>}
-      {removeState === 'failed' && <p className="dsh_espBuddy_pluginCardHint dsh_espBuddy_actionState is-failed">{t('action.failed')}</p>}
-    </li>
-  )
-}
-
-export function EspBuddySettingsPage(props: EspBuddySettingsPageProps) {
-  return (
-    <li className="dsh_espBuddy_page">
-      <div className="dsh_espBuddy_pageHeader">
-        <h2 id="dsh-esp-buddy-settings-title">{props.t('settings.title')}<span className="dsh_espBuddy_version">v{PLUGIN_VERSION}</span></h2>
-        <p>{props.t('settings.description')}</p>
-      </div>
-      <EspBuddySettingsContent {...props as unknown as EspBuddySectionProps} />
-    </li>
-  )
 }

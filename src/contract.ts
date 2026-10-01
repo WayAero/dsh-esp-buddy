@@ -11,6 +11,23 @@ export interface RolePackWireFile {
   readonly data: string
 }
 
+/** 官方请求的匹配信息及设备先答的结果。 */
+export interface ApprovalMirror {
+  readonly id: string
+  readonly sessionId: string
+  readonly tool: string
+  readonly hint: string
+
+  readonly callId?: string
+  readonly outcome?: 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
+}
+
+export const approvalMirrorsSchema = z.array(z.object({
+    id: z.string().min(1), sessionId: z.string().min(1), tool: z.string(), hint: z.string(),
+    callId: z.string().optional(),
+    outcome: z.enum(['allowed-once', 'rejected', 'cancelled', 'unavailable']).optional(),
+}).readonly())
+
 export interface RolePackProgress {
   readonly phase: 'idle' | 'validating' | 'sending' | 'installing' | 'cancelling' | 'completed' | 'cancelled' | 'failed'
   readonly packName?: string
@@ -86,11 +103,15 @@ export const rolePackFilesSchema = z.array(z.object({
   data: z.string(),
 }).readonly()).min(1)
 
-export const pluginUninstallSchema = z.object({
-  reloadRequired: z.literal(true),
-}).readonly()
-
 export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
+  {
+    id: 'dsh-esp-buddy#espBuddy/officialApprovals', service: 'espBuddy', namespace: 'espBuddy',
+    method: 'officialApprovals', invocation: { kind: 'direct' },
+    parameters: [{ name: 'sessionId', wire: 'sessionId', source: 'json', codec: {
+      mode: 'strict', typeSymbol: 'dsh-esp-buddy#SessionId', create: () => z.string().min(1),
+    } }],
+    result: { mode: 'strict', typeSymbol: 'dsh-esp-buddy#ApprovalMirror[]', create: () => approvalMirrorsSchema },
+  },
   {
     id: 'dsh-esp-buddy#espBuddy/status',
     service: 'espBuddy',
@@ -101,7 +122,7 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
     result: {
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#EspBuddyStatus',
-      schema: espBuddyStatusSchema,
+      create: () => espBuddyStatusSchema,
     },
   },
   {
@@ -114,7 +135,7 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
     result: {
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#EspBuddyStatus',
-      schema: espBuddyStatusSchema,
+      create: () => espBuddyStatusSchema,
     },
   },
   {
@@ -130,13 +151,13 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
       codec: {
         mode: 'strict',
         typeSymbol: 'dsh-esp-buddy#RolePackWireFile[]',
-        schema: rolePackFilesSchema,
+        create: () => rolePackFilesSchema,
       },
     }],
     result: {
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#RolePackProgress',
-      schema: rolePackProgressSchema,
+      create: () => rolePackProgressSchema,
     },
   },
   {
@@ -149,20 +170,7 @@ export const ESP_BUDDY_INVOCATIONS: readonly InvocationDescriptor[] = [
     result: {
       mode: 'strict',
       typeSymbol: 'dsh-esp-buddy#RolePackProgress',
-      schema: rolePackProgressSchema,
-    },
-  },
-  {
-    id: 'dsh-esp-buddy#espBuddy/uninstall',
-    service: 'espBuddy',
-    namespace: 'espBuddy',
-    method: 'uninstall',
-    invocation: { kind: 'direct' },
-    parameters: [],
-    result: {
-      mode: 'strict',
-      typeSymbol: 'dsh-esp-buddy#PluginUninstallResult',
-      schema: pluginUninstallSchema,
+      create: () => rolePackProgressSchema,
     },
   },
 ]

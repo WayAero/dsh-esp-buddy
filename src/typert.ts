@@ -13,6 +13,9 @@ export const TYPERT_MANIFEST: TypertContribution = {
       description: 'Current ESP32 Buddy transport and workload status.',
       tags: [],
       members: [{
+        kind: 'method', name: 'officialApprovals',
+        signature: 'officialApprovals(sessionId: string): ApprovalMirror[]',
+      }, {
         kind: 'method',
         name: 'status',
         signature: 'status(): EspBuddyStatus',
@@ -28,10 +31,6 @@ export const TYPERT_MANIFEST: TypertContribution = {
         kind: 'method',
         name: 'cancelRolePack',
         signature: 'cancelRolePack(): RolePackProgress',
-      }, {
-        kind: 'method',
-        name: 'uninstall',
-        signature: 'uninstall(): Promise<{ reloadRequired: true }>',
       }],
       types: [],
     }],

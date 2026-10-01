@@ -1,100 +1,75 @@
+import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 
-import type { EspBuddySettings, EspBuddyStatus, RolePackProgress, RolePackWireFile } from '../contract.ts'
-import { EspBuddySection, EspBuddySettingsPage, type EspBuddySectionInjected } from './SettingsSection.tsx'
+import { EspBuddyConfigPage, type EspBuddySectionInjected } from './SettingsSection.tsx'
 import { NS, en, zh } from './locales.ts'
 import { ESP_BUDDY_REMOTE } from './remote.ts'
-import { registerSettingsNavIcon } from './settings-nav-icon.ts'
 import { adoptStyles } from './styles.ts'
+import { isOfficialApproval, OfficialApprovalSync } from './official-approval.ts'
 
-export const inject = ['remote', 'slots', 'locale', 'settingsScope']
+export const inject = ['remote', 'slots', 'locale']
 
-interface EspBuddyNamespaceFace {
-  status(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
-  reconnect(): Promise<{ ok: true; value: EspBuddyStatus } | { ok: false; error: { code: string; message: string; details: object } }>
-  installRolePack(files: readonly RolePackWireFile[]): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
-  cancelRolePack(): Promise<{ ok: true; value: RolePackProgress } | { ok: false; error: { code: string; message: string; details: object } }>
-  uninstall(): Promise<{ ok: true; value: { reloadRequired: true } } | { ok: false; error: { code: string; message: string; details: object } }>
+function unwrap<T>(result: RemoteResult<T>): T {
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+  return result.value
 }
 
-export function apply(ctx: ClientContext): void {
-  adoptStyles()
+export async function apply(ctx: Context): Promise<void> {
+  ctx.effect(adoptStyles, 'dsh-esp-buddy: styles')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-esp-buddy: dictionaries')
 
-  let remote: EspBuddyNamespaceFace | undefined
-  ctx.effect(async () => {
-    const dispose = await ctx.remote.$mount(ESP_BUDDY_REMOTE)
-    remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.espBuddy') as EspBuddyNamespaceFace | undefined
-    if (remote === undefined) throw new Error('dsh-esp-buddy: the espBuddy Remote namespace did not mount')
-    return () => {
-      remote = undefined
-      void dispose()
-    }
-  }, 'dsh-esp-buddy: remote')
+  const dispose = await ctx.remote.$mount(ESP_BUDDY_REMOTE)
+  ctx.effect(() => dispose, 'dsh-esp-buddy: remote')
+  const remote = ctx.get('remote.espBuddy') as TypertRemoteNamespaceMap['espBuddy'] | undefined
+  if (remote === undefined) throw new Error('dsh-esp-buddy: the espBuddy Remote namespace did not mount')
 
-  const t = ctx.locale.bind(NS)
-  const scope = ctx.settingsScope.bind<EspBuddySettings>({ namespace: 'esp-buddy' })
-  const readStatus = async (): Promise<EspBuddyStatus> => {
-    if (remote === undefined) throw new Error('dsh-esp-buddy: status service is not mounted')
-    const result = await remote.status()
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-    return result.value
+  const configFace: EspBuddySectionInjected = {
+    readStatus: async () => unwrap(await remote.status()),
+    reconnect: async () => unwrap(await remote.reconnect()),
+    installRolePack: async files => unwrap(await remote.installRolePack(files)),
+    cancelRolePack: async () => unwrap(await remote.cancelRolePack()),
   }
-  const reconnect = async (): Promise<EspBuddyStatus> => {
-    if (remote === undefined) throw new Error('dsh-esp-buddy: status service is not mounted')
-    const result = await remote.reconnect()
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-    return result.value
-  }
-  const installRolePack = async (files: readonly RolePackWireFile[]): Promise<RolePackProgress> => {
-    if (remote === undefined) throw new Error('dsh-esp-buddy: role-pack service is not mounted')
-    const result = await remote.installRolePack(files)
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-    return result.value
-  }
-  const cancelRolePack = async (): Promise<RolePackProgress> => {
-    if (remote === undefined) throw new Error('dsh-esp-buddy: role-pack service is not mounted')
-    const result = await remote.cancelRolePack()
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-    return result.value
-  }
-  const uninstall = async (): Promise<void> => {
-    if (remote === undefined) throw new Error('dsh-esp-buddy: runtime service is not mounted')
-    const result = await remote.uninstall()
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-  }
-  const inject = (): EspBuddySectionInjected => ({
-    hooks: { scope },
-    readStatus,
-    reconnect,
-    installRolePack,
-    cancelRolePack,
-    setSetting: async (field, value) => { await scope.set(field, value) },
-    uninstall,
+  ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
+    name: 'plugins.row.config',
+    key: 'dsh-esp-buddy#esp-buddy',
+    locale: NS,
+    inject: () => configFace,
+  }, EspBuddyConfigPage))
+
+  // 使用官方会话卡片的公开接口同步设备决定。
+  ctx.inject(['uiSession'], scope => {
+    const sync = new OfficialApprovalSync()
+    scope.effect(() => {
+      let active = true
+      let running = false
+      let failed = false
+      const poll = async () => {
+        if (!active || running) return
+        running = true
+        try {
+          for (const status of scope.uiSession.sessionStatus.getSnapshot().values()) {
+            const pending = status.pendingInteraction
+            if (!isOfficialApproval(pending) || !pending.answerable) continue
+            const mirrors = unwrap(await remote.officialApprovals(pending.sessionId))
+            if (active) await sync.sync(pending, mirrors)
+          }
+          failed = false
+        } catch (error) {
+          if (!failed && active) console.error('[dsh-esp-buddy] official approval sync failed:', error)
+          failed = true
+        } finally { running = false }
+      }
+      // 订阅触发首次同步，轮询只处理已有官方卡片，不创建替代界面。
+      const unsubscribe = scope.uiSession.sessionStatus.subscribe(() => { void poll() })
+      const timer = setInterval(() => { void poll() }, 250)
+      void poll()
+      return () => { active = false; clearInterval(timer); unsubscribe(); sync.dispose() }
+    }, 'dsh-esp-buddy: official approval sync')
   })
-
-  ctx.effect(
-    () => registerSettingsNavIcon(() => t('nav')),
-    'dsh-esp-buddy: settings navigation icon',
-  )
-
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'esp-buddy',
-    order: 200,
-    label: () => t('nav'),
-    locale: NS,
-    inject,
-  }, EspBuddySettingsPage))
-
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'esp-buddy',
-    locale: NS,
-    inject,
-  }, EspBuddySection))
 }

@@ -82,3 +82,20 @@ test('timeout delegates to the next Harness answerer', async () => {
   assert.equal(await outcome, 'unavailable')
   assert.equal(manager.summary().waiting, 0)
 })
+
+// 请求 ID 需满足固件长度限制，并隔离重启前设备迟到的回复。
+test('request IDs fit the Buddy limit and do not repeat across manager restarts', async () => {
+  const ids = new Set<string>()
+  for (let index = 0; index < 20; index++) {
+    const manager = new ApprovalManager({ timeoutMs: 1_000, onChanged: () => undefined })
+    await manager.setConnected(true)
+    const outcome = manager.handle(request('bash') as never, async () => 'unavailable')
+    const id = manager.summary().prompt!.id
+    assert.ok(Buffer.byteLength(id, 'utf8') < 40)
+    assert.ok(!ids.has(id))
+    ids.add(id)
+    manager.answer({ cmd: 'permission', id, decision: 'once' })
+    assert.equal(await outcome, 'allowed-once')
+    await manager.dispose()
+  }
+})

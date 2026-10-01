@@ -1,5 +1,3 @@
-import navigationIcon from './assets/esp-buddy-nav-icon.png'
-
 export const STYLE_ID = 'dsh-esp-buddy-style'
 
 export const cssText = `
@@ -9,9 +7,6 @@ export const cssText = `
 .dsh_espBuddy_pageHeader h2 { margin:0; color:var(--dsw-alias-label-primary); font-size:22px; line-height:30px; font-weight:600; }
 .dsh_espBuddy_pageHeader p { margin:6px 0 0; color:var(--dsw-alias-label-tertiary); font-size:14px; line-height:20px; }
 .dsh_espBuddy_version { display:inline-flex; align-items:center; width:max-content; margin-left:8px; padding:1px 8px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; color:var(--dsw-alias-label-tertiary); font-size:12px; font-weight:500; vertical-align:middle; }
-.dsh_espBuddy_pluginCardRow { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; }
-.dsh_espBuddy_pluginCard .dsh_espBuddy_actions { flex:none; margin:0; }
-.dsh_espBuddy_pluginCardHint { margin:0 16px 14px; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px; }
 .dsh_espBuddy_cardName { color:var(--dsw-alias-label-primary); font-size:15px; line-height:1.4; font-weight:600; }
 .dsh_espBuddy_cardBody { margin:0 16px; padding:16px 0 8px; border-top:1px solid var(--dsw-alias-border-l2); }
 .dsh_espBuddy_page .dsh_espBuddy_cardBody { margin:0; padding:0; border:0; }
@@ -46,8 +41,6 @@ export const cssText = `
 .dsh_espBuddy_actionState { color:var(--dsw-alias-state-success-primary); font-size:12px; }
 .dsh_espBuddy_actionState.is-failed { color:var(--dsw-alias-state-error-primary); }
 .dsh_espBuddy_removeButton { color:var(--dsw-alias-state-error-primary) !important; }
-[data-dsh-esp-buddy-settings-nav] > svg:first-child { display:none; }
-[data-dsh-esp-buddy-settings-nav]::before { content:''; flex:none; width:16px; height:16px; background:center / contain no-repeat url('${navigationIcon}'); }
 .dsh_espBuddy_dropZone { display:flex; flex-direction:column; align-items:center; gap:5px; padding:22px 16px; border:1px dashed var(--dsw-alias-border-l2); border-radius:10px; background:var(--dsw-alias-bg-layer-2); text-align:center; transition:border-color .15s ease,background .15s ease; }
 .dsh_espBuddy_dropZone.is-dragging { border-color:var(--dsw-alias-brand-primary); background:var(--dsw-alias-interactive-bg-hover); }
 .dsh_espBuddy_dropZone strong { color:var(--dsw-alias-label-primary); font-size:14px; font-weight:500; }
@@ -92,10 +85,11 @@ export const cssText = `
 }
 `
 
-export function adoptStyles(): void {
-  if (document.getElementById(STYLE_ID) !== null) return
+export function adoptStyles(): () => void {
+  if (document.getElementById(STYLE_ID) !== null) return () => undefined
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = cssText
   document.head.appendChild(style)
+  return () => style.remove()
 }

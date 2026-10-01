@@ -47,9 +47,23 @@ test('diagnostics provide concise status, safe configuration, and actionable nex
   assert.doesNotMatch(text, /"deviceNamePrefix"/)
 })
 
-test('remote contract exposes status, reconnect, role-pack install/cancel, and uninstall under one namespace', () => {
+test('remote contract exposes status, role-pack transfer, and session approvals under one namespace', () => {
   assert.deepEqual(
     ESP_BUDDY_INVOCATIONS.map(invocation => `${invocation.namespace}/${invocation.method}`),
-    ['espBuddy/status', 'espBuddy/reconnect', 'espBuddy/installRolePack', 'espBuddy/cancelRolePack', 'espBuddy/uninstall'],
+    ['espBuddy/officialApprovals', 'espBuddy/status', 'espBuddy/reconnect', 'espBuddy/installRolePack', 'espBuddy/cancelRolePack'],
   )
+  for (const invocation of ESP_BUDDY_INVOCATIONS) {
+    assert.equal(invocation.result.mode, 'strict')
+    if (invocation.result.mode === 'strict') assert.equal(typeof invocation.result.create, 'function')
+    for (const parameter of invocation.parameters) {
+      if (parameter.codec.mode === 'strict') assert.equal(typeof parameter.codec.create, 'function')
+    }
+  }
+  const pending = ESP_BUDDY_INVOCATIONS.find(invocation => invocation.method === 'officialApprovals')
+  assert.equal(pending?.result.mode, 'strict')
+  if (pending?.result.mode === 'strict') {
+    const card = { id: 'p_0001', sessionId: 'session-a', tool: 'write', hint: 'example' }
+    assert.deepEqual(pending.result.create().parse([card]), [card])
+    assert.throws(() => pending.result.create().parse([{ ...card, sessionId: undefined }]))
+  }
 })

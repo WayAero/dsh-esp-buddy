@@ -1,16 +1,5 @@
 export const zh = {
-  nav: 'ESP Buddy',
-  'settings.title': 'ESP Buddy',
-  'settings.description': '连接 ESP32 Buddy，显示会话状态并处理硬件审批。',
-  'settings.expand': '展开设置',
-  'settings.collapse': '收起设置',
-  'settings.manage': '插件管理',
-  'settings.manageDesc': '移除后需要刷新或重启 DSH，才能卸载已加载的客户端模块。',
-  'settings.remove': '移除 ESP Buddy',
-  'settings.removeConfirm': '确认移除',
-  'settings.removeCancel': '取消',
-  'settings.removing': '正在移除…',
-  'settings.removed': '插件已移除，请刷新或重启 DSH。',
+  'settings.description': '连接 ESP32 Buddy，显示会话状态，并与官方会话卡片同步审批决定。',
   'settings.enabled': '启用 ESP Buddy',
   'settings.enabledDesc': '关闭后停止 BLE 连接和硬件审批转发，但保留配置。',
   'status.title': '连接状态',
@@ -73,23 +62,16 @@ export const zh = {
   'config.heartbeatDesc': '修改后重启连接进程；最小 1 秒。',
   'config.saved': '已保存',
   'config.failed': '保存失败',
+  'config.save': '保存',
+  'config.discard': '放弃修改并重新读取',
+  'config.unavailable': '当前配置不可编辑，请确认 Host 已连接且插件处于启用状态。',
+  'config.writeDelay': '角色包写入间隔（毫秒）',
 } satisfies Record<string, string>
 
 export type EspBuddyKey = keyof typeof zh
 
 export const en = {
-  nav: 'ESP Buddy',
-  'settings.title': 'ESP Buddy',
-  'settings.description': 'Connect an ESP32 Buddy for session status and hardware approvals.',
-  'settings.expand': 'Expand settings',
-  'settings.collapse': 'Collapse settings',
-  'settings.manage': 'Plugin management',
-  'settings.manageDesc': 'Refresh or restart DSH after removal to unload the current client module.',
-  'settings.remove': 'Remove ESP Buddy',
-  'settings.removeConfirm': 'Confirm removal',
-  'settings.removeCancel': 'Cancel',
-  'settings.removing': 'Removing…',
-  'settings.removed': 'Plugin removed. Refresh or restart DSH.',
+  'settings.description': 'Connect an ESP32 Buddy for session status and approvals synchronized with official conversation cards.',
   'settings.enabled': 'Enable ESP32 Buddy',
   'settings.enabledDesc': 'Turning this off stops BLE and hardware approval forwarding while preserving configuration.',
   'status.title': 'Connection status',
@@ -152,6 +134,10 @@ export const en = {
   'config.heartbeatDesc': 'Changing this restarts the connection process; minimum 1 second.',
   'config.saved': 'Saved',
   'config.failed': 'Save failed',
+  'config.save': 'Save',
+  'config.discard': 'Discard and reload',
+  'config.unavailable': 'Configuration is unavailable. Check the Host connection and plugin enablement.',
+  'config.writeDelay': 'Role-pack write delay (milliseconds)',
 } satisfies Record<EspBuddyKey, string>
 
 export const NS = 'esp-buddy'

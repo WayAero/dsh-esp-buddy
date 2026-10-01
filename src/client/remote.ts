@@ -2,6 +2,7 @@ import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-ty
 
 import {
   ESP_BUDDY_INVOCATIONS,
+  type ApprovalMirror,
   type EspBuddyStatus,
   type RolePackProgress,
   type RolePackWireFile,
@@ -14,18 +15,18 @@ export const ESP_BUDDY_REMOTE: TypertRemoteContribution = {
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$6573704275646479 {
+    officialApprovals: (sessionId: string) => Promise<RemoteResult<ApprovalMirror[]>>
     status: () => Promise<RemoteResult<EspBuddyStatus>>
     reconnect: () => Promise<RemoteResult<EspBuddyStatus>>
     installRolePack: (files: readonly RolePackWireFile[]) => Promise<RemoteResult<RolePackProgress>>
     cancelRolePack: () => Promise<RemoteResult<RolePackProgress>>
-    uninstall: () => Promise<RemoteResult<{ reloadRequired: true }>>
   }
   interface TypertRemoteMap {
+    'espBuddy/officialApprovals': (sessionId: string) => Promise<RemoteResult<ApprovalMirror[]>>
     'espBuddy/status': () => Promise<RemoteResult<EspBuddyStatus>>
     'espBuddy/reconnect': () => Promise<RemoteResult<EspBuddyStatus>>
     'espBuddy/installRolePack': (files: readonly RolePackWireFile[]) => Promise<RemoteResult<RolePackProgress>>
     'espBuddy/cancelRolePack': () => Promise<RemoteResult<RolePackProgress>>
-    'espBuddy/uninstall': () => Promise<RemoteResult<{ reloadRequired: true }>>
   }
   interface TypertRemoteNamespaceMap {
     espBuddy: TypertRemoteNamespace$6573704275646479

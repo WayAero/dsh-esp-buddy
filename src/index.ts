@@ -1,11 +1,8 @@
 import { fileURLToPath } from 'node:url'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-token-meter'
-import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 
 import { ApprovalManager } from './approval/approval-manager.ts'
@@ -27,25 +24,9 @@ export const name = 'dsh-esp-buddy'
 export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert']
 export { Config }
 
-const execFileAsync = promisify(execFile)
-
-async function uninstallFromCurrentProfile(): Promise<void> {
-  const profile = process.env.DSH_PROFILE?.trim() || 'web'
-  const command = process.platform === 'win32' ? 'dsh.cmd' : 'dsh'
-  try {
-    await execFileAsync(command, ['plugin', '--profile', profile, 'remove', 'dsh-esp-buddy'], {
-      windowsHide: true,
-      timeout: 120_000,
-    })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`Unable to remove dsh-esp-buddy from profile "${profile}": ${detail}`)
-  }
-}
-
 export function apply(ctx: Context, rawConfig: PluginConfig): void {
-  // Cordis validates Config and fills its schema defaults before calling apply().
-  const settings = installEspBuddySettings(ctx, rawConfig as ResolvedConfig)
+  // Cordis 验证 Config 并把 volatile 字段交给当前 profile 的配置编辑器。
+  const settings = installEspBuddySettings(ctx, rawConfig)
   let activeConfig = settings.get()
   const state = new BuddyStateStore()
   let sessions!: SessionManager
@@ -71,7 +52,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
 
   sessions = new SessionManager(ctx, refresh)
   projections = new ProjectionManager(ctx, refresh)
-  approvals = new ApprovalManager({ timeoutMs: activeConfig.approvalTimeoutMs, onChanged: refresh })
+  approvals = new ApprovalManager({ timeoutMs: activeConfig.approvalTimeoutMs, onChanged: refresh, shareOfficialCards: true })
   sessions.start()
   projections.start()
   refresh()
@@ -261,10 +242,17 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     return rolePackTransfer.install(files)
   }
   const cancelRolePack = (): RolePackProgress => rolePackTransfer.cancel()
-  new EspBuddyRuntime(ctx, readStatus, reconnectTransport, installRolePack, cancelRolePack, uninstallFromCurrentProfile)
+  new EspBuddyRuntime(
+    ctx,
+    readStatus,
+    reconnectTransport,
+    installRolePack,
+    cancelRolePack,
+    sessionId => approvals.officialMirrors(sessionId),
+  )
   ctx.effect(() => {
     const dispose = ctx.typert.register(TYPERT_MANIFEST)
-    return () => { void dispose() }
+    return dispose
   }, 'dsh-esp-buddy: typert manifest')
 
   const stopSettingsWatch = settings.watch((next, previous) => {
@@ -276,7 +264,10 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
       || next.rolePackWriteDelayMs !== previous.rolePackWriteDelayMs
     )
     void runTransport(async () => {
-      if (!next.enabled) await stopTransport()
+      if (!next.enabled) {
+        approvals.delegateAll()
+        await stopTransport()
+      }
       else if (next.autoConnect !== previous.autoConnect) {
         if (next.autoConnect) startTransport(next)
         else await stopTransport()

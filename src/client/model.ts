@@ -21,7 +21,7 @@ export function formatDiagnostics(
     : status.everConnected
       ? '已断开（此前曾连接成功）'
       : '未连接（尚未连接成功）'
-  const value = (input: string | number | undefined, fallback = '未记录') => input ?? fallback
+  const value = (input: string | number | undefined, fallback: string | number = '未记录') => input ?? fallback
   const recommendations: string[] = []
 
   if (!settings.enabled) {

@@ -89,7 +89,7 @@ test('plugin remains active without an optional settings provider', async () => 
   await fiber.dispose()
 })
 
-test('plugin loads, delegates approval while offline, and unloads cleanly', async () => {
+test('offline approvals delegate to Harness and unload cleanly', async () => {
   const ctx = await createContext()
   const approvalHooks = () => ctx.events._hooks['approval/request']?.length ?? 0
   const fiber = ctx.plugin(buddyPlugin, {
@@ -104,12 +104,19 @@ test('plugin loads, delegates approval while offline, and unloads cleanly', asyn
   assert.notEqual(fiber.uid, null)
   assert.equal(approvalHooks(), 1)
 
-  const outcome = await ctx.waterfall(
+  const runtime = ctx.get('espBuddy') as {
+    officialApprovals(sessionId: string): { id: string }[]
+  }
+  let delegated = 0
+  const outcome = ctx.waterfall(
     'approval/request',
-    { toolName: 'bash' },
-    async () => 'unavailable',
+    { toolName: 'bash', agent: { session: { id: 'session-1' } } },
+    async () => { delegated += 1; return 'allowed-once' },
   )
-  assert.equal(outcome, 'unavailable')
+  const cards = runtime.officialApprovals('session-1')
+  assert.deepEqual(cards, [])
+  assert.equal(await outcome, 'allowed-once')
+  assert.equal(delegated, 1)
 
   await fiber.update({
     enabled: true,
@@ -118,6 +125,7 @@ test('plugin loads, delegates approval while offline, and unloads cleanly', asyn
     heartbeatIntervalMs: 3_000,
     deviceNamePrefix: 'Claude',
   })
+  await fiber.await()
   assert.equal(approvalHooks(), 1)
 
   await fiber.dispose()
