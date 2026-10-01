@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ESP Buddy",
+    "description": "连接 ESP32-S3 Buddy，显示会话状态与 Token 用量，并与官方会话卡片同步审批。"
+  }
+}

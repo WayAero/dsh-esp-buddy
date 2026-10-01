@@ -5,6 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 
 import { EspBuddyConfigPage, type EspBuddySectionInjected } from './SettingsSection.tsx'
@@ -13,7 +14,7 @@ import { ESP_BUDDY_REMOTE } from './remote.ts'
 import { adoptStyles } from './styles.ts'
 import { isOfficialApproval, OfficialApprovalSync } from './official-approval.ts'
 
-export const inject = ['remote', 'slots', 'locale']
+export const inject = ['remote', 'slots', 'locale', 'configForms']
 
 function unwrap<T>(result: RemoteResult<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
@@ -30,14 +31,15 @@ export async function apply(ctx: Context): Promise<void> {
   if (remote === undefined) throw new Error('dsh-esp-buddy: the espBuddy Remote namespace did not mount')
 
   const configFace: EspBuddySectionInjected = {
+    settingsSource: ctx.configForms.get<Record<string, unknown>>('esp-buddy'),
     readStatus: async () => unwrap(await remote.status()),
     reconnect: async () => unwrap(await remote.reconnect()),
     installRolePack: async files => unwrap(await remote.installRolePack(files)),
     cancelRolePack: async () => unwrap(await remote.cancelRolePack()),
   }
-  ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
-    name: 'plugins.row.config',
-    key: 'dsh-esp-buddy#esp-buddy',
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: 'dsh-esp-buddy',
     locale: NS,
     inject: () => configFace,
   }, EspBuddyConfigPage))

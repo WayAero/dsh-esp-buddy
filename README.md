@@ -1,6 +1,6 @@
-# dsh-esp-buddy
+# ESP Buddy
 
-`dsh-esp-buddy` 是 DeepSeek Harness 的 Cordis 插件。它把会话数量、Token 与上下文（Context）
+ESP Buddy（包名与仓库名：`dsh-esp-buddy`）是 DeepSeek Harness 的 Cordis 插件。它把会话数量、Token 与上下文（Context）
 汇总值、审批请求发送到 ESP32-S3 Buddy。审批同时交给设备和官方会话卡片，任一端决定后另一端提示结束。
 Windows x64 安装包内置蓝牙辅助程序，运行时不需要 Python 环境。
 
@@ -45,7 +45,7 @@ Nordic UART Service（NUS）的 Buddy。
 
 ## 设置与状态
 
-在“插件（Plugins）”页面打开 `dsh-esp-buddy` 组合包的 `esp-buddy` 行，再打开其“配置”页面。Desktop
+在“插件（Plugins）”页面打开 ESP Buddy，即可在插件详情页直接设置。Desktop
 和 Web profile 各自管理自己的安装与配置。配置页提供：
 
 - 启用/停用插件，以及自动连接开关；

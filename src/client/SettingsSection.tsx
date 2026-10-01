@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import type { ConfigPageForm } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 
@@ -8,13 +9,18 @@ import { RolePackSection } from './RolePackSection.tsx'
 import { PLUGIN_VERSION } from './version.ts'
 
 export interface EspBuddySectionInjected {
+  settingsSource: {
+    getSnapshot: () => ConfigPageForm['state']
+    subscribe: (listener: () => void) => () => void
+    mutate: ConfigPageForm['mutate']
+  }
   readStatus: () => Promise<EspBuddyStatus>
   reconnect: () => Promise<EspBuddyStatus>
   installRolePack: (files: readonly RolePackWireFile[]) => Promise<RolePackProgress>
   cancelRolePack: () => Promise<RolePackProgress>
 }
 
-export type EspBuddySectionProps = PropsRuntime<'plugins.row.config'>
+export type EspBuddySectionProps = PropsRuntime<'plugins.bundle.config'>
   & InjectFace<EspBuddySectionInjected>
   & PropsLocale<'esp-buddy'>
 
@@ -24,8 +30,13 @@ function displayTime(value?: string): string {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleTimeString()
 }
 
-/** Plugins 页提供配置值与 revision；草稿只有点击保存后才提交。 */
-export function EspBuddyConfigPage({ view, form, readStatus, reconnect, installRolePack, cancelRolePack, t }: EspBuddySectionProps) {
+/** 组合包入口不提供行配置，订阅官方共享表单；保存仍写入原 esp-buddy 命名空间。 */
+export function EspBuddyConfigPage({ view, settingsSource, readStatus, reconnect, installRolePack, cancelRolePack, t }: EspBuddySectionProps) {
+  const formState = useSyncExternalStore(
+    useCallback(listener => settingsSource.subscribe(listener), [settingsSource]),
+    useCallback(() => settingsSource.getSnapshot(), [settingsSource]),
+  )
+  const form: ConfigPageForm = { state: formState, mutate: (ops, revision) => settingsSource.mutate(ops, revision) }
   const accepted = form?.state.value as EspBuddySettings | undefined
   const [draft, setDraft] = useState<EspBuddySettings>()
   const [revision, setRevision] = useState<number>()

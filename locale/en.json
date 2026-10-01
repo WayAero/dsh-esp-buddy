@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ESP Buddy",
+    "description": "Connect ESP32-S3 Buddy for session status, token usage, and approvals synchronized with official conversation cards."
+  }
+}
