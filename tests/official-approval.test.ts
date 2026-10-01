@@ -24,15 +24,18 @@ for (const decision of ['once', 'deny'] as const) {
     await manager.setConnected(true)
     const f = fixture()
     let forwarded = 0
-    const outcome = manager.handle(f.request as never, () => { forwarded++; return f.result.promise })
+    const outcome = manager.handle({ ...f.request, displayReason: { zh: '允许修改权限，保留文件内容', en: 'Allow permissions' } } as never,
+      () => { forwarded++; return f.result.promise })
     await Promise.resolve()
     assert.equal(forwarded, 1)
     const id = manager.summary().prompt!.id
+    assert.equal(manager.summary().prompt!.hint, '允许修改权限，保留文件内容')
     assert.equal(manager.answer({ cmd: 'permission', id, decision }), true)
     const expected = decision === 'once' ? 'allowed-once' : 'rejected'
     assert.equal(await outcome, expected)
     assert.equal(manager.summary().waiting, 0)
     const mirrors = manager.officialMirrors('session-1')
+    assert.equal(mirrors[0].hint, f.pending.reason)
     assert.equal(mirrors[0].outcome, expected)
     await new OfficialApprovalSync().sync(f.pending, mirrors)
     assert.equal(await f.result.promise, expected)

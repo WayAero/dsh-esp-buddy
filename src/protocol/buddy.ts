@@ -7,7 +7,7 @@ export const BUDDY_LIMITS = Object.freeze({
   messageBytes: 96,
   promptIdBytes: 40,
   promptToolBytes: 20,
-  promptHintBytes: 44,
+  promptHintBytes: 1024,
 })
 
 /** 当前插件发送的 Buddy 状态快照版本。 */
@@ -21,6 +21,7 @@ export class BuddyProtocolError extends Error {
 }
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
+const hintTruncationNotice = '【说明未完整显示】\n'
 
 function boundedCounter(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0
@@ -40,6 +41,13 @@ export function truncateUtf8(value: string, maxBytes: number): string {
     }
   }
   return ''
+}
+
+/** 截断标记放在正文开头，避免用户滚动前把不完整说明当成全文。 */
+function encodePromptHint(value: string, maxBytes: number): string {
+  if (encoder.encode(value).byteLength <= maxBytes) return value
+  const noticeBytes = encoder.encode(hintTruncationNotice).byteLength
+  return hintTruncationNotice + truncateUtf8(value, maxBytes - noticeBytes)
 }
 
 function v1Snapshot(state: BuddyState): Record<string, unknown> {
@@ -62,7 +70,7 @@ function v1Snapshot(state: BuddyState): Record<string, unknown> {
     snapshot.prompt = {
       id,
       tool: truncateUtf8(state.prompt.tool, BUDDY_LIMITS.promptToolBytes),
-      hint: truncateUtf8(state.prompt.hint, BUDDY_LIMITS.promptHintBytes),
+      hint: encodePromptHint(state.prompt.hint, BUDDY_LIMITS.promptHintBytes),
     }
   }
 
@@ -103,12 +111,35 @@ export function serializeBuddyState(state: BuddyState, protocol: 1 | 2 = 1): str
   const snapshot = v1Snapshot(state)
   if (protocol === 2) addV2(snapshot, state)
 
-  const line = `${JSON.stringify(snapshot)}\n`
-  const payloadBytes = encoder.encode(line.slice(0, -1)).byteLength
-  if (payloadBytes > BUDDY_LIMITS.lineBytes) {
+  let json = JSON.stringify(snapshot)
+  const fits = () => encoder.encode(json).byteLength <= BUDDY_LIMITS.lineBytes
+  if (state.prompt !== undefined && !fits()) {
+    // JSON 转义可能把一个原始字节扩为六个；先让会话摘要为审批正文留出空间。
+    const entries = snapshot.entries as string[]
+    while (entries.length > 0 && !fits()) {
+      entries.pop()
+      json = JSON.stringify(snapshot)
+    }
+    if (!fits()) {
+      const prompt = snapshot.prompt as { hint: string }
+      // 按实际序列化大小查找可用正文预算，字符边界与截断标记由同一编码流程处理。
+      let low = encoder.encode(hintTruncationNotice).byteLength
+      let high = BUDDY_LIMITS.promptHintBytes
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2)
+        prompt.hint = encodePromptHint(state.prompt.hint, middle)
+        json = JSON.stringify(snapshot)
+        if (fits()) low = middle
+        else high = middle - 1
+      }
+      prompt.hint = encodePromptHint(state.prompt.hint, low)
+      json = JSON.stringify(snapshot)
+    }
+  }
+  if (!fits()) {
     throw new BuddyProtocolError(`Buddy snapshot exceeds ${BUDDY_LIMITS.lineBytes} bytes`)
   }
-  return line
+  return `${json}\n`
 }
 
 export function parsePermissionReply(line: string): PermissionReply {

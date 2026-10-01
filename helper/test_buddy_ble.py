@@ -1,4 +1,5 @@
 import asyncio
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -29,6 +30,27 @@ class ByteLineDecoderTests(unittest.TestCase):
 
 
 class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
+    async def test_long_chinese_snapshot_fragments_without_losing_utf8_or_newline(self) -> None:
+        class Client:
+            def __init__(self) -> None:
+                self.calls: list[tuple[bytes, bool]] = []
+
+            async def write_gatt_char(self, _uuid: str, data: bytes, response: bool) -> None:
+                self.calls.append((data, response))
+
+        hint = "允许修改权限，但不修改文件内容。" * 20
+        line = json.dumps({"protocol": 2, "prompt": {"id": "p_1", "tool": "pwsh", "hint": hint}}, ensure_ascii=False) + "\n"
+        self.assertLessEqual(len(hint.encode("utf-8")), 1024)
+        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.0))
+        for payload_size in (20, 244):
+            client = Client()
+            await helper._write_line(client, line, "snapshot", payload_size, payload_size)
+            self.assertGreater(len(client.calls), 1)
+            self.assertTrue(all(len(data) <= payload_size and not response for data, response in client.calls))
+            received = b"".join(data for data, _response in client.calls)
+            self.assertEqual(received, line.encode("utf-8"))
+            self.assertEqual(json.loads(received.decode("utf-8"))["prompt"]["hint"], hint)
+
     async def test_snapshot_replaces_stale_snapshot(self) -> None:
         buffer = TxLineBuffer()
         await buffer.put("first\n")

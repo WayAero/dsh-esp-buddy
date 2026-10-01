@@ -11,6 +11,24 @@ const request = (toolName: string, signal?: AbortSignal) => ({
 })
 const wait = (ms = 0): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
+test('Buddy selects nonblank official Chinese, English, audit reason, then a visible fallback', async () => {
+  const cases = [
+    { displayReason: { zh: ' 允许修改权限\n保留文件内容 ', en: 'Allow permissions' }, reason: 'audit', expected: ' 允许修改权限\n保留文件内容 ' },
+    { displayReason: { zh: ' \n', en: 'Allow permissions' }, reason: 'audit', expected: 'Allow permissions' },
+    { displayReason: { zh: '', en: ' ' }, reason: 'audit', expected: 'audit' },
+    { displayReason: undefined, reason: undefined, expected: '请在官方会话卡片查看审批原因' },
+  ]
+  for (const item of cases) {
+    const manager = new ApprovalManager({ timeoutMs: 1_000, onChanged: () => undefined })
+    await manager.setConnected(true)
+    const outcome = manager.handle({ ...request('pwsh'), ...item } as never, async () => 'unavailable')
+    assert.equal(manager.summary().prompt!.hint, item.expected)
+    manager.answer({ cmd: 'permission', id: manager.summary().prompt!.id, decision: 'deny' })
+    assert.equal(await outcome, 'rejected')
+    await manager.dispose()
+  }
+})
+
 test('offline approvals immediately delegate to Harness', async () => {
   const manager = new ApprovalManager({ timeoutMs: 100, onChanged: () => undefined })
   let delegated = 0

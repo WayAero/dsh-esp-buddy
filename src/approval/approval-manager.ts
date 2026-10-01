@@ -84,7 +84,10 @@ export class ApprovalManager {
       prompt: {
         id: localId,
         tool: request.toolName,
-        hint: request.reason ?? '',
+        // 设备采用官方中文说明；镜像仍保留原始 reason，避免改变官方卡片匹配身份。
+        hint: [request.displayReason?.zh, request.displayReason?.en, request.reason]
+          .find(text => text !== undefined && text.trim().length > 0)
+          ?? '请在官方会话卡片查看审批原因',
       },
       createdAt: this.now(),
       next: branch === undefined ? next : () => branch.result,
