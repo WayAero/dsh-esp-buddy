@@ -7,3 +7,19 @@ coverage/
 __pycache__/
 helper/dist/
 .pyinstaller/
+
+# 本机开发资料，保留在本地，不提交到公开仓库。
+/AGENTS.md
+/cordis.dev.yml
+/docs/dsh-0.2.0-rc.2-migration-plan.md
+/docs/evidence/
+/docs/local/
+/role-packs/*-test/
+
+# profile、凭据和临时备份不得进入源码仓库。
+.env
+.env.*
+!.env.example
+.credentials.yaml
+.anonymous-user-id
+*.bak
