@@ -89,6 +89,8 @@ export function adoptStyles(): () => void {
   if (document.getElementById(STYLE_ID) !== null) return () => undefined
   const style = document.createElement('style')
   style.id = STYLE_ID
+  // rc.2 会把未标注的样式归给下一次加载的模块；预先声明归属，避免停用皮肤时被一并删除。
+  style.setAttribute('data-plugin', 'dsh-esp-buddy')
   style.textContent = cssText
   document.head.appendChild(style)
   return () => style.remove()

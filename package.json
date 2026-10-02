@@ -1,6 +1,6 @@
 {
   "name": "dsh-esp-buddy",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "连接 ESP32-S3 Buddy，显示会话状态与 Token 用量，并与官方会话卡片同步审批。",
   "icon": "./assets/plugin-icon.svg",
   "repository": {

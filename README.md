@@ -51,7 +51,7 @@ rc.2 暂不提供插件自动更新；升级时在官方插件页先卸载，再
 
 ### 本地安装包
 
-在项目目录执行 `npm pack`，生成 `dsh-esp-buddy-0.5.0.tgz`。在 Windows x64 的 Desktop 或 Web
+在项目目录执行 `npm pack`，生成 `dsh-esp-buddy-0.5.1.tgz`。在 Windows x64 的 Desktop 或 Web
 profile 中打开官方“插件（Plugins）”页面，用“添加插件”填写该压缩包的绝对路径；同一压缩包可分别安装到两个
 profile。安装后在该页面启用组合包及 `esp-buddy` 行，之后也在该页面管理或卸载，无需插件自行执行卸载命令。
 
