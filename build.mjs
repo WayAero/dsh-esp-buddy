@@ -31,7 +31,6 @@ await build({
   jsx: 'automatic',
   external: [...dshExternal, 'react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'scheduler'],
   define: defines,
-  loader: { '.png': 'dataurl' },
   banner: {
     js: "window.__ModuleLoader__.load({ id: 'dsh-esp-buddy', factory: (require) => { var module = { exports: {} }; var exports = module.exports;",
   },

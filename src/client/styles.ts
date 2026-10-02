@@ -1,15 +1,7 @@
 export const STYLE_ID = 'dsh-esp-buddy-style'
 
 export const cssText = `
-.dsh_espBuddy_card { list-style:none; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-3); transition:border-color .16s,background .16s; }
 .dsh_espBuddy_page { list-style:none; margin:0; }
-.dsh_espBuddy_pageHeader { margin:0 0 16px; }
-.dsh_espBuddy_pageHeader h2 { margin:0; color:var(--dsw-alias-label-primary); font-size:22px; line-height:30px; font-weight:600; }
-.dsh_espBuddy_pageHeader p { margin:6px 0 0; color:var(--dsw-alias-label-tertiary); font-size:14px; line-height:20px; }
-.dsh_espBuddy_version { display:inline-flex; align-items:center; width:max-content; margin-left:8px; padding:1px 8px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; color:var(--dsw-alias-label-tertiary); font-size:12px; font-weight:500; vertical-align:middle; }
-.dsh_espBuddy_cardName { color:var(--dsw-alias-label-primary); font-size:15px; line-height:1.4; font-weight:600; }
-.dsh_espBuddy_cardBody { margin:0 16px; padding:16px 0 8px; border-top:1px solid var(--dsw-alias-border-l2); }
-.dsh_espBuddy_page .dsh_espBuddy_cardBody { margin:0; padding:0; border:0; }
 .dsh_espBuddy_section { display:flex; flex-direction:column; gap:16px; min-width:0; }
 /* 只排列字段文案，避免影响官方 Input 的包裹元素和 Switch 内部节点。 */
 .dsh_espBuddy_field > span:first-child { display:flex; flex-direction:column; gap:2px; min-width:0; }
@@ -30,9 +22,6 @@ export const cssText = `
 .dsh_espBuddy_error strong { color:var(--dsw-alias-label-primary); font-weight:500; }
 .dsh_espBuddy_configActions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:14px; }
 .dsh_espBuddy_actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:14px; }
-.dsh_espBuddy_actionState { color:var(--dsw-alias-state-success-primary); font-size:12px; }
-.dsh_espBuddy_actionState.is-failed { color:var(--dsw-alias-state-error-primary); }
-.dsh_espBuddy_removeButton { color:var(--dsw-alias-state-error-primary) !important; }
 .dsh_espBuddy_dropZone { display:flex; flex-direction:column; align-items:center; gap:5px; padding:22px 16px; border:1px dashed var(--dsw-alias-border-l2); border-radius:10px; background:var(--dsw-alias-bg-layer-2); text-align:center; transition:border-color .15s ease,background .15s ease; }
 .dsh_espBuddy_dropZone.is-dragging { border-color:var(--dsw-alias-brand-primary); background:var(--dsw-alias-interactive-bg-hover); }
 .dsh_espBuddy_dropZone strong { color:var(--dsw-alias-label-primary); font-size:14px; font-weight:500; }
@@ -60,8 +49,6 @@ export const cssText = `
 .dsh_espBuddy_packHint, .dsh_espBuddy_packError { margin:10px 0 0; font-size:12px; line-height:18px; overflow-wrap:anywhere; }
 .dsh_espBuddy_field { display:grid; grid-template-columns:minmax(0,1fr) 180px; align-items:center; gap:20px; padding:12px 0; border-top:1px solid var(--dsw-alias-border-l2); }
 .dsh_espBuddy_toggleField { grid-template-columns:minmax(0,1fr) 36px; }
-.dsh_espBuddy_save { color:var(--dsw-alias-brand-primary); font-size:12px; }
-.dsh_espBuddy_save.is-failed { color:var(--dsw-alias-label-primary); }
 @media (prefers-reduced-motion:reduce) {
   .dsh_espBuddy_progress > i b { transition:none; }
   .dsh_espBuddy_progress.is-sending > i b::after { animation:none; }
