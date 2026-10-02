@@ -30,7 +30,28 @@ npm pack
 
 ## 安装
 
-在项目目录执行 `npm pack`，生成 `dsh-esp-buddy-0.5.0-rc.1.tgz`。在 Windows x64 的 Desktop 或 Web
+### npm 包与官方入口
+
+npm 包名为 `dsh-esp-buddy`，插件显示名称为 **ESP Buddy**。首次发布到 npm 后，可在 Harness 的
+“插件（Plugins）→ 添加插件”中输入 `dsh-esp-buddy` 并安装；指定版本时输入 `dsh-esp-buddy@版本号`。
+中国大陆镜像源若尚未同步新版本，可切换至 npm 官方源。
+
+也可以用 Harness 命令行安装到指定 profile：
+
+```powershell
+dsh plugin add dsh-esp-buddy --profile desktop
+# Web profile 名称由自己的 Harness 环境决定
+dsh plugin add dsh-esp-buddy --profile <Web-profile名称>
+```
+
+在自行管理的 Cordis 工程中可执行 `npm install dsh-esp-buddy`；该命令只安装包，仍需配置
+Cordis 加载器。Harness 用户优先使用官方插件入口或 `dsh plugin add`，由 Harness 管理配置与加载。
+
+rc.2 暂不提供插件自动更新；升级时在官方插件页先卸载，再安装新版本。
+
+### 本地安装包
+
+在项目目录执行 `npm pack`，生成 `dsh-esp-buddy-0.5.0.tgz`。在 Windows x64 的 Desktop 或 Web
 profile 中打开官方“插件（Plugins）”页面，用“添加插件”填写该压缩包的绝对路径；同一压缩包可分别安装到两个
 profile。安装后在该页面启用组合包及 `esp-buddy` 行，之后也在该页面管理或卸载，无需插件自行执行卸载命令。
 
@@ -38,6 +59,25 @@ profile。安装后在该页面启用组合包及 `esp-buddy` 行，之后也在
 
 从 Git 源安装时，需要让包管理器执行 `prepare` 来构建 `dist`。若安装环境禁止依赖包的构建脚本，
 可先在本仓库执行 `npm pack`，再安装生成的 tgz。
+
+### 维护者发布
+
+发布前运行 `npm test`、`npm run test:python`、`npm run typecheck` 和 `npm pack --dry-run`。
+`prepare` 会构建 `dist`；发布包内置 Windows x64 蓝牙程序，使用者不需要编译代码或安装 Python。
+检查包内保留图标、语言元信息和第三方素材的 `NOTICE.txt`，并且不含本机配置、开发过程文档或凭据。
+
+使用 npm 官方源登录后发布；首次发布需先确认版本号和发布标签：
+
+```powershell
+npm login --registry=https://registry.npmjs.org/
+# 正式版本使用 latest；预发布版本改用 next
+npm publish --dry-run --tag latest
+npm publish --tag latest
+```
+
+不带版本的安装默认使用 `latest` 标签；仅发布到 `next` 的候选版本需使用 `dsh-esp-buddy@next`
+或完整版本号。同一包名与版本号发布后不能重复使用。发布后用 `npm view dsh-esp-buddy dist-tags`
+核对版本，再从官方插件入口安装验证。
 
 `esp-buddy` 行的配置默认启用；在插件管理页启用组合包和该行后，会自动连接名称以 `Claude` 开头、且提供
 Nordic UART Service（NUS）的 Buddy。

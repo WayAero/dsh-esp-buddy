@@ -1,8 +1,27 @@
 {
   "name": "dsh-esp-buddy",
-  "version": "0.5.0-rc.1",
+  "version": "0.5.0",
   "description": "连接 ESP32-S3 Buddy，显示会话状态与 Token 用量，并与官方会话卡片同步审批。",
   "icon": "./assets/plugin-icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WayAero/dsh-esp-buddy.git"
+  },
+  "homepage": "https://github.com/WayAero/dsh-esp-buddy#readme",
+  "bugs": {
+    "url": "https://github.com/WayAero/dsh-esp-buddy/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "cordis",
+    "esp32",
+    "bluetooth",
+    "approval"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "dist/index.js",
   "exports": {
