@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
+import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-token-meter'
@@ -21,10 +22,11 @@ import { resolveHelperLaunch } from './transport/launch.ts'
 import { TYPERT_MANIFEST } from './typert.ts'
 
 export const name = 'dsh-esp-buddy'
-export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert']
+export const inject = ['agents', 'sessions', 'sessionProjections', 'approval', 'typert', 'timer']
 export { Config }
 
 export function apply(ctx: Context, rawConfig: PluginConfig): void {
+  const logger = ctx.logger('dsh-esp-buddy')
   // Cordis 验证 Config 并把 volatile 字段交给当前 profile 的配置编辑器。
   const settings = installEspBuddySettings(ctx, rawConfig)
   let activeConfig = settings.get()
@@ -52,7 +54,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
 
   sessions = new SessionManager(ctx, refresh)
   projections = new ProjectionManager(ctx, refresh)
-  approvals = new ApprovalManager({ timeoutMs: activeConfig.approvalTimeoutMs, onChanged: refresh, shareOfficialCards: true })
+  approvals = new ApprovalManager({ timeoutMs: activeConfig.approvalTimeoutMs, onChanged: refresh, shareOfficialCards: true, logger })
   sessions.start()
   projections.start()
   refresh()
@@ -103,11 +105,11 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
       if (helper.sendBuddyLine(serializeBuddyState(state.snapshot(), BUDDY_STATE_PROTOCOL_VERSION), 'snapshot')) {
         lastTxAt = new Date().toISOString()
       } else {
-        console.warn('[dsh-esp-buddy] BLE Helper is not ready for snapshot tx')
+        logger.warn('BLE Helper is not ready for snapshot tx')
       }
     } catch (error) {
       lastError = (error as Error).message
-      console.error(`[dsh-esp-buddy] snapshot serialization failed: ${lastError}`)
+      logger.error(`snapshot serialization failed: ${lastError}`)
     }
   }
 
@@ -135,7 +137,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
         if (event.type === 'status') {
           if (buddyConnected !== event.connected) {
             const detail = event.connected && event.device ? ` device=${event.device}` : ''
-            console.info(`[dsh-esp-buddy] BLE ${event.connected ? 'connected' : 'disconnected'}${detail}`)
+            logger.info(`BLE ${event.connected ? 'connected' : 'disconnected'}${detail}`)
           }
           buddyConnected = event.connected
           if (!event.connected) ackRouter.disconnect()
@@ -157,30 +159,30 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
           try {
             if (ackRouter.route(event.line)) return
             const reply = parsePermissionReply(event.line)
-            if (!approvals.answer(reply)) console.warn(`[dsh-esp-buddy] ignored stale prompt reply id=${reply.id}`)
+            if (!approvals.answer(reply)) logger.warn(`ignored stale prompt reply id=${reply.id}`)
           } catch (error) {
             lastError = (error as Error).message
-            console.warn(`[dsh-esp-buddy] ignored malformed Buddy reply: ${lastError}`)
+            logger.warn(`ignored malformed Buddy reply: ${lastError}`)
           }
           return
         }
         lastError = event.message
-        console.warn(`[dsh-esp-buddy] BLE Helper: ${event.message}`)
+        logger.warn(`BLE Helper: ${event.message}`)
       },
       onLog: (level, message) => {
         if (level === 'error') {
           lastError = message
-          console.error(`[dsh-esp-buddy] ${message}`)
+          logger.error(message)
         } else if (level === 'warning') {
-          console.warn(`[dsh-esp-buddy] ${message}`)
+          logger.warn(message)
         } else {
-          console.info(`[dsh-esp-buddy] ${message}`)
+          logger.info(message)
         }
       },
     })
     stopStateListener = state.onChanged(sendSnapshot)
-    const heartbeat = setInterval(sendSnapshot, config.heartbeatIntervalMs)
-    stopHeartbeat = () => clearInterval(heartbeat)
+    // 随插件停用自动清理；连接重启时仍提前撤销旧心跳。
+    stopHeartbeat = ctx.interval(sendSnapshot, config.heartbeatIntervalMs)
     helper.start()
   }
 
@@ -278,13 +280,13 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
       }
     }).catch(error => {
       lastError = (error as Error).message
-      console.error(`[dsh-esp-buddy] settings apply failed: ${lastError}`)
+      logger.error(`settings apply failed: ${lastError}`)
     })
   })
 
   startTransport(activeConfig)
   const initial = state.snapshot()
-  console.info(`[dsh-esp-buddy] loaded: sessions=${initial.total} running=${initial.running}`)
+  logger.info(`loaded: sessions=${initial.total} running=${initial.running}`)
 
   ctx.effect(() => async () => {
     stopSettingsWatch()
@@ -293,6 +295,6 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     projections.dispose()
     sessions.dispose()
     state.clear()
-    console.info('[dsh-esp-buddy] unloaded')
+    logger.info('unloaded')
   }, 'dsh-esp-buddy lifecycle')
 }

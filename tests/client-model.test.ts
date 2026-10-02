@@ -3,7 +3,15 @@ import test from 'node:test'
 
 import type { EspBuddySettings, EspBuddyStatus } from '../src/contract.ts'
 import { ESP_BUDDY_INVOCATIONS } from '../src/contract.ts'
-import { connectionTone, formatDiagnostics } from '../src/client/model.ts'
+import { connectionTone, formatDiagnostics, configNotice, inheritedConfigOps } from '../src/client/model.ts'
+
+test('configuration notices distinguish loading, unavailable, memory and read-only states', () => {
+  assert.equal(configNotice({ status: 'loading', mode: 'host', writable: false }), 'config.loading')
+  assert.equal(configNotice({ status: 'unavailable', mode: 'host', writable: false }), 'config.unavailable')
+  assert.equal(configNotice({ status: 'unavailable', mode: 'memory', writable: false }), 'config.memory')
+  assert.equal(configNotice({ status: 'ready', mode: 'host', writable: false }), 'config.readonly')
+  assert.equal(configNotice({ status: 'ready', mode: 'host', writable: true }), undefined)
+})
 
 const baseStatus: EspBuddyStatus = {
   enabled: true,
@@ -66,4 +74,13 @@ test('remote contract exposes status, role-pack transfer, and session approvals 
     assert.deepEqual(pending.result.create().parse([card]), [card])
     assert.throws(() => pending.result.create().parse([{ ...card, sessionId: undefined }]))
   }
+})
+
+
+test('inheritance removes present known overrides including equal defaults, preserving unknown fields', () => {
+  assert.deepEqual(inheritedConfigOps({ enabled: true, approvalTimeoutMs: 300000, future: 1 }), [
+    { op: 'unset', path: ['enabled'] }, { op: 'unset', path: ['approvalTimeoutMs'] },
+  ])
+  assert.deepEqual(inheritedConfigOps(Object.create({ enabled: true })), [])
+  for (const value of [undefined, null, [], 'invalid']) assert.deepEqual(inheritedConfigOps(value), [])
 })

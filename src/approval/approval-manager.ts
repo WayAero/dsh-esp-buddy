@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import type { Logger } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 
 import type { ApprovalMirror } from '../contract.ts'
@@ -18,6 +19,7 @@ export interface ApprovalManagerOptions {
   onChanged: () => void
   now?: () => number
   shareOfficialCards?: boolean
+  logger?: Pick<Logger, 'error'>
 }
 
 interface OfficialBranch {
@@ -39,12 +41,15 @@ export class ApprovalManager {
   private disposing = false
   private readonly shareOfficialCards: boolean
   private readonly official = new Map<string, OfficialBranch>()
+  private readonly logger: Pick<Logger, 'error'>
 
   constructor(options: ApprovalManagerOptions) {
     this.timeoutMs = options.timeoutMs
     this.onChanged = options.onChanged
     this.now = options.now ?? Date.now
     this.shareOfficialCards = options.shareOfficialCards ?? false
+    // Host 提供带插件归属的 logger；独立使用时仍输出异常，不能静默吞掉。
+    this.logger = options.logger ?? console
   }
 
   isConnected(): boolean {
@@ -161,7 +166,7 @@ export class ApprovalManager {
     branch.started = true
     // next 只调用一次。设备先答后保留镜像，直到官方卡片结算并退出应答链。
     void Promise.resolve().then(branch.next).catch(error => {
-      if (branch.mirror.outcome === undefined) console.error('[dsh-esp-buddy] official approval answerer failed:', error)
+      if (branch.mirror.outcome === undefined) this.logger.error('official approval answerer failed:', error)
       return 'unavailable' as const
     }).then(outcome => {
       branch.resolve(outcome)

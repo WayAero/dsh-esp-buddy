@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -7,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RemoteResult, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
+import type { EspBuddySettings } from '../contract.ts'
 
 import { EspBuddyConfigPage, type EspBuddySectionInjected } from './SettingsSection.tsx'
 import { NS, en, zh } from './locales.ts'
@@ -14,7 +16,7 @@ import { ESP_BUDDY_REMOTE } from './remote.ts'
 import { adoptStyles } from './styles.ts'
 import { isOfficialApproval, OfficialApprovalSync } from './official-approval.ts'
 
-export const inject = ['remote', 'slots', 'locale', 'configForms']
+export const inject = ['remote', 'slots', 'locale', 'configForms', 'timer']
 
 function unwrap<T>(result: RemoteResult<T>): T {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
@@ -31,7 +33,7 @@ export async function apply(ctx: Context): Promise<void> {
   if (remote === undefined) throw new Error('dsh-esp-buddy: the espBuddy Remote namespace did not mount')
 
   const configFace: EspBuddySectionInjected = {
-    settingsSource: ctx.configForms.get<Record<string, unknown>>('esp-buddy'),
+    settingsSource: ctx.configForms.get<EspBuddySettings>('esp-buddy'),
     readStatus: async () => unwrap(await remote.status()),
     reconnect: async () => unwrap(await remote.reconnect()),
     installRolePack: async files => unwrap(await remote.installRolePack(files)),
@@ -69,9 +71,9 @@ export async function apply(ctx: Context): Promise<void> {
       }
       // 订阅触发首次同步，轮询只处理已有官方卡片，不创建替代界面。
       const unsubscribe = scope.uiSession.sessionStatus.subscribe(() => { void poll() })
-      const timer = setInterval(() => { void poll() }, 250)
+      const stopTimer = scope.interval(() => { void poll() }, 250)
       void poll()
-      return () => { active = false; clearInterval(timer); unsubscribe(); sync.dispose() }
+      return () => { active = false; stopTimer(); unsubscribe(); sync.dispose() }
     }, 'dsh-esp-buddy: official approval sync')
   })
 }

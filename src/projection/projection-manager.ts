@@ -2,27 +2,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-token-meter'
+import type { TokenUsageProjection, ContextPressureProjection, ContextBreakdownProjection } from '@deepseek-ai/dsh-token-meter'
 
 import type { BuddyContext, BuddyContextBreakdown, BuddyUsage } from '../protocol/types.ts'
-
-interface TokenUsageProjection {
-  uncachedInputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-}
-
-interface ContextPressureProjection {
-  pressureTokens?: number
-  projectedTokens?: number
-  contextWindow?: number
-}
-
-interface ContextBreakdownProjection {
-  systemTokens: number
-  toolsTokens: number
-  messageTokens: number
-}
 
 interface SessionProjectionState {
   tokenUsage?: TokenUsageProjection
@@ -149,7 +131,8 @@ export class ProjectionManager {
   }
 
   private seed(session: Session): void {
-    const snapshot = this.ctx.sessionProjections.snapshot(session)
+    // 只生成设备使用的公开视图；未知值仍经过下方的运行时检查。
+    const snapshot = this.ctx.sessionProjections.snapshot(session, ['tokenUsage', 'contextPressure', 'contextBreakdown'])
     const state: SessionProjectionState = { updatedAt: ++this.revision }
     this.sessions.set(session.id, state)
     for (const [key, value] of Object.entries(snapshot.values)) this.applyValue(session, key, value)

@@ -1,19 +1,9 @@
 import type { ApprovalMirror } from '../contract.ts'
+import type { PendingApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
 
 /** 官方 PendingApproval 的公开字段及方法；不访问其私有状态或宿主 DOM。 */
-export interface OfficialApproval {
-  readonly kind: 'approval'
-  readonly sessionId: string
-  readonly key: string
-  readonly toolName: string
-  readonly callId?: string
-  readonly reason?: string
-  readonly answerable: boolean
-  readonly result: Promise<'allowed-once' | 'rejected'>
-  answer(outcome: 'allowed-once' | 'rejected'): Promise<void>
-  abort(reason: unknown): void
-  delegate(): void
-}
+export type OfficialApproval = Pick<PendingApproval,
+  'kind' | 'sessionId' | 'key' | 'toolName' | 'callId' | 'reason' | 'answerable' | 'result' | 'answer' | 'abort' | 'delegate'>
 
 export function isOfficialApproval(value: unknown): value is OfficialApproval {
   if (typeof value !== 'object' || value === null) return false

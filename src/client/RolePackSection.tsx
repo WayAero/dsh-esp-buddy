@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 
 import type { RolePackProgress, RolePackWireFile } from '../contract.ts'
 import type { EspBuddyKey } from './locales.ts'
@@ -83,7 +84,7 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
       <div className="dsh_espBuddy_groupHeader">
         <h3>{t('rolePack.title')}</h3>
         {progress.phase !== 'idle' && <span className={`dsh_espBuddy_packPhase is-${progress.phase}`}>{phaseLabel}</span>}
-        {active && <button type="button" className="dsh_espBuddy_cancelPack" disabled={progress.phase === 'cancelling'} onClick={() => { void cancel() }}>{t('rolePack.cancel')}</button>}
+        {active && <Button variant="outline" size="sm" className="dsh_espBuddy_cancelPack" disabled={progress.phase === 'cancelling'} onClick={() => { void cancel() }}>{t('rolePack.cancel')}</Button>}
       </div>
       <p className="dsh_espBuddy_groupDesc">{t('rolePack.description')}</p>
       <div
@@ -114,13 +115,13 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
         />
         <strong>{t('rolePack.dropTitle')}</strong>
         <span>{t('rolePack.dropDesc')}</span>
-        <button type="button" disabled={active} onClick={() => inputRef.current?.click()}>{t('rolePack.choose')}</button>
+        <Button variant="outline" className="dsh_espBuddy_choosePack" disabled={active} onClick={() => inputRef.current?.click()}>{t('rolePack.choose')}</Button>
       </div>
 
       {selection !== undefined && (
         <div className="dsh_espBuddy_packSummary">
           <span><strong>{selection.name}</strong><small>{selected.length} {t('rolePack.files')} · {formatBytes(selection.totalBytes)}</small></span>
-          <button type="button" disabled={!enabled || !connected || active} onClick={() => { void upload() }}>{t('rolePack.send')}</button>
+          <Button variant="primary" disabled={!enabled || !connected || active} onClick={() => { void upload() }}>{t('rolePack.send')}</Button>
         </div>
       )}
 

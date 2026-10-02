@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import TimerService from '@deepseek-ai/cordis-plugin-timer'
 
 import * as buddyPlugin from '../src/index.ts'
 
@@ -71,6 +72,7 @@ class MockTypert extends Service {
 
 async function createContext(withSettings = true): Promise<Context> {
   const ctx = new Context()
+  await ctx.plugin(TimerService)
   await ctx.plugin(MockAgents)
   await ctx.plugin(MockSessions)
   await ctx.plugin(MockSessionProjections)
@@ -140,4 +142,35 @@ test('disabled plugin has no active business effects', async () => {
 
   assert.notEqual(fiber.uid, null)
   await fiber.dispose()
+})
+
+
+test('framework intervals stop both on early cancellation and plugin disposal', async () => {
+  const ctx = new Context()
+  const timerFiber = ctx.plugin(TimerService)
+  await timerFiber
+  let ticks = 0
+  let cancel: () => void
+  const fiber = ctx.plugin({ inject: ['timer'], apply(scope: Context) {
+    cancel = scope.interval(() => { ticks += 1 }, 2)
+  } })
+  await fiber
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.ok(ticks > 0)
+  cancel!()
+  const stopped = ticks
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(ticks, stopped)
+  await fiber.dispose()
+  const second = ctx.plugin({ inject: ['timer'], apply(scope: Context) {
+    scope.interval(() => { ticks += 1 }, 2)
+  } })
+  await second
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.ok(ticks > stopped)
+  await second.dispose()
+  const disposed = ticks
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(ticks, disposed)
+  await timerFiber.dispose()
 })

@@ -1,4 +1,23 @@
 import type { EspBuddySettings, EspBuddyStatus } from '../contract.ts'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+
+/** 不可写的页面仍能显示状态；区分加载过程、远程限制与配置来源不可用。 */
+export function configNotice(state: Pick<ConfigFormSnapshot<unknown>, 'status' | 'mode' | 'writable'>):
+  'config.loading' | 'config.memory' | 'config.unavailable' | 'config.readonly' | undefined {
+  if (state.mode === 'memory') return 'config.memory'
+  if (state.status === 'loading') return 'config.loading'
+  if (state.status === 'unavailable') return 'config.unavailable'
+  if (!state.writable) return 'config.readonly'
+  return undefined
+}
+
+/** 按字段存在性清除覆盖，保留未知字段；覆盖值等于继承值时也须移除。 */
+export function inheritedConfigOps(user: unknown) {
+  if (user === null || typeof user !== 'object' || Array.isArray(user)) return []
+  const fields: (keyof EspBuddySettings)[] = ['enabled', 'autoConnect', 'deviceNamePrefix', 'approvalTimeoutMs', 'heartbeatIntervalMs', 'rolePackWriteDelayMs']
+  return fields.filter(field => Object.hasOwn(user, field))
+    .map(field => ({ op: 'unset' as const, path: [field] }))
+}
 
 export type ConnectionTone = 'idle' | 'connected' | 'error'
 
