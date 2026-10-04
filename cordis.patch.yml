@@ -6,5 +6,5 @@
         autoConnect: true
         approvalTimeoutMs: 300000
         heartbeatIntervalMs: 3000
-        deviceNamePrefix: Claude
+        deviceAddress: ""
         rolePackWriteDelayMs: 0

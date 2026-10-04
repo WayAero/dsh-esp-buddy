@@ -3,7 +3,17 @@ import test from 'node:test'
 
 import type { EspBuddySettings, EspBuddyStatus } from '../src/contract.ts'
 import { ESP_BUDDY_INVOCATIONS } from '../src/contract.ts'
+import { Config, readConfig } from '../src/config.ts'
 import { connectionTone, formatDiagnostics, configNotice, inheritedConfigOps } from '../src/client/model.ts'
+
+test('legacy name-prefix configuration does not restrict discovery and saved address survives reload', () => {
+  const legacy = readConfig(Config({ deviceNamePrefix: 'Claude' }))
+  assert.equal(legacy.deviceAddress, '')
+  assert.equal(Object.hasOwn(legacy, 'deviceNamePrefix'), false)
+  const address = 'AA:BB:CC:DD:00:01'
+  const saved = readConfig(Config({ ...legacy, deviceAddress: address }))
+  assert.equal(readConfig(Config(JSON.parse(JSON.stringify(saved)))).deviceAddress, address)
+})
 
 test('configuration notices distinguish loading, unavailable, memory and read-only states', () => {
   assert.equal(configNotice({ status: 'loading', mode: 'host', writable: false }), 'config.loading')
@@ -30,7 +40,7 @@ const settings: EspBuddySettings = {
   autoConnect: true,
   approvalTimeoutMs: 300_000,
   heartbeatIntervalMs: 3_000,
-  deviceNamePrefix: 'Claude',
+  deviceAddress: '',
   rolePackWriteDelayMs: 0,
 }
 
@@ -49,10 +59,10 @@ test('diagnostics provide concise status, safe configuration, and actionable nex
   assert.match(text, /插件版本: 0.3.7/)
   assert.match(text, /连接状态: 未连接（尚未连接成功）/)
   assert.match(text, /最近错误: Buddy device not found/)
-  assert.match(text, /设备名前缀: Claude/)
-  assert.match(text, /确认 ESP32 已上电并处于可发现状态/)
+  assert.match(text, /设备地址: 自动选择唯一 NUS 设备/)
+  assert.match(text, /确认 ESP32 已上电并广播 NUS 服务/)
   assert.match(text, /未包含会话内容、审批内容或角色包文件数据。/)
-  assert.doesNotMatch(text, /"deviceNamePrefix"/)
+  assert.doesNotMatch(text, /"deviceAddress"/)
 })
 
 test('remote contract exposes status, role-pack transfer, and session approvals under one namespace', () => {

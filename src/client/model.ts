@@ -14,7 +14,7 @@ export function configNotice(state: Pick<ConfigFormSnapshot<unknown>, 'status' |
 /** 按字段存在性清除覆盖，保留未知字段；覆盖值等于继承值时也须移除。 */
 export function inheritedConfigOps(user: unknown) {
   if (user === null || typeof user !== 'object' || Array.isArray(user)) return []
-  const fields: (keyof EspBuddySettings)[] = ['enabled', 'autoConnect', 'deviceNamePrefix', 'approvalTimeoutMs', 'heartbeatIntervalMs', 'rolePackWriteDelayMs']
+  const fields: (keyof EspBuddySettings)[] = ['enabled', 'autoConnect', 'deviceAddress', 'approvalTimeoutMs', 'heartbeatIntervalMs', 'rolePackWriteDelayMs']
   return fields.filter(field => Object.hasOwn(user, field))
     .map(field => ({ op: 'unset' as const, path: [field] }))
 }
@@ -49,7 +49,7 @@ export function formatDiagnostics(
     if (status.helperState === 'stopped') recommendations.push('连接进程未运行；检查插件是否已启用，然后点击“重新连接”。')
     if (status.helperState === 'blocked') recommendations.push('连接进程因连续失败被阻止重启；记录最近错误后重启 DSH，再重新连接。')
     if (status.helperState === 'backoff') recommendations.push('连接进程正在退避重试；等待下一次扫描，并保留最近错误用于定位。')
-    if (settings.autoConnect) recommendations.push(`确认 ESP32 已上电并处于可发现状态，且设备名以“${settings.deviceNamePrefix}”开头。`)
+    if (settings.autoConnect) recommendations.push('确认 ESP32 已上电并广播 NUS 服务；多台设备时填写目标 BLE 设备地址。')
     else recommendations.push('自动连接已关闭；开启后等待扫描，或使用“重新连接”手动发起一次连接。')
   }
   if (status.lastError !== undefined) recommendations.push('优先结合“最近错误”检查 Windows 蓝牙配对、设备广播和 BLE 服务状态。')
@@ -92,7 +92,7 @@ export function formatDiagnostics(
     '## 配置',
     `插件启用: ${settings.enabled ? '是' : '否'}`,
     `自动连接: ${settings.autoConnect ? '是' : '否'}`,
-    `设备名前缀: ${settings.deviceNamePrefix}`,
+    `设备地址: ${settings.deviceAddress || '自动选择唯一 NUS 设备'}`,
     `审批超时: ${settings.approvalTimeoutMs / 1_000} 秒`,
     `状态心跳: ${settings.heartbeatIntervalMs / 1_000} 秒`,
     '',

@@ -129,7 +129,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
       executablePath: launch.executablePath,
       args: [
         ...launch.args,
-        '--device-name-prefix', config.deviceNamePrefix,
+        '--device-address', config.deviceAddress,
         '--write-line-delay-ms', String(config.rolePackWriteDelayMs),
       ],
       cwd: launch.cwd,
@@ -261,7 +261,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     activeConfig = next
     approvals.setTimeoutMs(next.approvalTimeoutMs)
     const needsRestart = helper !== undefined && (
-      next.deviceNamePrefix !== previous.deviceNamePrefix
+      next.deviceAddress !== previous.deviceAddress
       || next.heartbeatIntervalMs !== previous.heartbeatIntervalMs
       || next.rolePackWriteDelayMs !== previous.rolePackWriteDelayMs
     )

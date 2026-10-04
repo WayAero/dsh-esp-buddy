@@ -6,7 +6,7 @@ export interface Config {
   autoConnect: Volatile<boolean>
   approvalTimeoutMs: Volatile<number>
   heartbeatIntervalMs: Volatile<number>
-  deviceNamePrefix: Volatile<string>
+  deviceAddress: Volatile<string>
   rolePackWriteDelayMs: Volatile<number>
 }
 
@@ -15,7 +15,7 @@ export const Config = Schema.object({
   autoConnect: Schema.boolean().default(true).volatile(),
   approvalTimeoutMs: Schema.number().step(1).min(1_000).default(300_000).volatile(),
   heartbeatIntervalMs: Schema.number().step(1).min(1_000).max(29_000).default(3_000).volatile(),
-  deviceNamePrefix: Schema.string().min(1).max(32).default('Claude').volatile(),
+  deviceAddress: Schema.string().max(36).default('').volatile(),
   rolePackWriteDelayMs: Schema.number().step(1).min(0).max(4).default(0).volatile(),
 })
 
@@ -24,7 +24,7 @@ export interface ResolvedConfig {
   autoConnect: boolean
   approvalTimeoutMs: number
   heartbeatIntervalMs: number
-  deviceNamePrefix: string
+  deviceAddress: string
   rolePackWriteDelayMs: number
 }
 
@@ -35,7 +35,7 @@ export function readConfig(config: Config): ResolvedConfig {
     autoConnect: config.autoConnect.get(),
     approvalTimeoutMs: config.approvalTimeoutMs.get(),
     heartbeatIntervalMs: config.heartbeatIntervalMs.get(),
-    deviceNamePrefix: config.deviceNamePrefix.get(),
+    deviceAddress: config.deviceAddress.get(),
     rolePackWriteDelayMs: config.rolePackWriteDelayMs.get(),
   }
 }

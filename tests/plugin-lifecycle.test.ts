@@ -99,7 +99,7 @@ test('offline approvals delegate to Harness and unload cleanly', async () => {
     autoConnect: false,
     approvalTimeoutMs: 300_000,
     heartbeatIntervalMs: 3_000,
-    deviceNamePrefix: 'Claude',
+    deviceAddress: '',
   })
   await fiber
 
@@ -125,7 +125,7 @@ test('offline approvals delegate to Harness and unload cleanly', async () => {
     autoConnect: false,
     approvalTimeoutMs: 300_000,
     heartbeatIntervalMs: 3_000,
-    deviceNamePrefix: 'Claude',
+    deviceAddress: '',
   })
   await fiber.await()
   assert.equal(approvalHooks(), 1)

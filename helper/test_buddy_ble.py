@@ -41,7 +41,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
         hint = "允许修改权限，但不修改文件内容。" * 20
         line = json.dumps({"protocol": 2, "prompt": {"id": "p_1", "tool": "pwsh", "hint": hint}}, ensure_ascii=False) + "\n"
         self.assertLessEqual(len(hint.encode("utf-8")), 1024)
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.0))
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
         for payload_size in (20, 244):
             client = Client()
             await helper._write_line(client, line, "snapshot", payload_size, payload_size)
@@ -88,7 +88,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
             async def write_gatt_char(self, _uuid: str, data: bytes, response: bool) -> None:
                 self.calls.append((data, response))
 
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 180, 0.004))
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 180, 0.004))
         client = Client()
         await helper._write_line(client, "abcdef", "control", 2, 2)
         self.assertEqual(client.calls, [(b"ab", True), (b"cd", True), (b"ef", True)])
@@ -113,7 +113,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
             async def write_gatt_char(self, _uuid: str, _data: bytes, response: bool) -> None:
                 return None
 
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.004))
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.004))
         client = Client()
         await helper._write_line(client, '{"cmd":"char_begin"}\n', "control", 244, 244)
         await helper._write_line(client, '{"total":1}\n', "snapshot", 244, 244)
@@ -135,7 +135,7 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
             async def disconnect(self) -> None:
                 self.disconnects += 1
 
-        helper = BuddyBleHelper(HelperConfig("Claude", 10.0, 244, 0.004))
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.004))
         client = Client()
         helper._client = client
         await helper._disconnect()
@@ -149,7 +149,7 @@ class UtilityTests(unittest.TestCase):
 
     def test_argument_defaults_match_esp_transport(self) -> None:
         config = parse_args([])
-        self.assertEqual(config.device_name_prefix, "Claude")
+        self.assertEqual(config.device_address, "")
         self.assertEqual(config.write_chunk_cap, 244)
         self.assertEqual(config.write_line_delay_seconds, 0.0)
 
@@ -157,24 +157,79 @@ class UtilityTests(unittest.TestCase):
         for delay_ms in (0, 1, 4):
             self.assertEqual(parse_args(["--write-line-delay-ms", str(delay_ms)]).write_line_delay_seconds, delay_ms / 1_000)
 
-    def test_device_filter_requires_name_and_rejects_wrong_advertised_service(self) -> None:
-        device = SimpleNamespace(name="Claude-A1B2")
-        self.assertTrue(matches_buddy(device, SimpleNamespace(local_name=None, service_uuids=[]), "Claude"))
-        self.assertTrue(matches_buddy(
-            device,
-            SimpleNamespace(local_name=None, service_uuids=[NUS_SERVICE_UUID.upper()]),
-            "Claude",
-        ))
-        self.assertFalse(matches_buddy(
-            device,
-            SimpleNamespace(local_name=None, service_uuids=["0000180f-0000-1000-8000-00805f9b34fb"]),
-            "Claude",
-        ))
-        self.assertFalse(matches_buddy(
-            SimpleNamespace(name="Other-NUS"),
-            SimpleNamespace(local_name=None, service_uuids=[NUS_SERVICE_UUID]),
-            "Claude",
-        ))
+
+
+class DiscoveryTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def candidate(name, address="AA:BB:CC:DD:00:01", local_name=None, uuids=None):
+        return (SimpleNamespace(name=name, address=address),
+                SimpleNamespace(local_name=local_name, service_uuids=[NUS_SERVICE_UUID] if uuids is None else uuids))
+
+    async def scan(self, helper, candidates):
+        # 模拟 Bleak 的地址到最终广播数据映射，不让名称承担身份匹配。
+        with patch("helper.buddy_ble.BleakScanner.discover", return_value={str(i): c for i, c in enumerate(candidates)}) as discover:
+            result = await helper._scan()
+        discover.assert_awaited_once_with(timeout=10.0, return_adv=True, service_uuids=[NUS_SERVICE_UUID], scanning_mode="active")
+        return result
+
+    async def test_new_old_custom_short_and_missing_names(self):
+        for name in ("DeepSeek-A1B2", "Claude-A1B2", "Desk Buddy", "DeepSeek", "D", " " * 29, None, ""):
+            with self.subTest(name=name):
+                helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+                candidate = self.candidate(name)
+                self.assertIs(await self.scan(helper, [candidate]), candidate[0])
+                expected = f"{name} ({candidate[0].address})" if name else candidate[0].address
+                self.assertEqual(helper._device_label, expected)
+
+    async def test_scan_response_name_overrides_short_device_name(self):
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        await self.scan(helper, [self.candidate("DeepSeek", local_name="DeepSeek-A1B2")])
+        self.assertEqual(helper._device_label, "DeepSeek-A1B2 (AA:BB:CC:DD:00:01)")
+
+    async def test_same_name_devices_require_address_and_saved_address_survives_rename(self):
+        first = self.candidate("Desk Buddy")
+        second = self.candidate("Desk Buddy", "AA:BB:CC:DD:00:02")
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        with self.assertRaisesRegex(RuntimeError, "Multiple NUS devices.*00:01.*00:02"):
+            await self.scan(helper, [first, second])
+        helper = BuddyBleHelper(HelperConfig(first[0].address.lower(), 10.0, 244, 0.0))
+        self.assertIs(await self.scan(helper, [second, first]), first[0])
+        renamed = self.candidate("My New Name")
+        self.assertIs(await self.scan(helper, [second, renamed]), renamed[0])
+        self.assertEqual(helper._device_label, "My New Name (AA:BB:CC:DD:00:01)")
+        self.assertIsNone(await self.scan(helper, [second]))
+
+    async def test_missing_or_wrong_service_never_falls_back_to_name_or_address(self):
+        helper = BuddyBleHelper(HelperConfig("AA:BB:CC:DD:00:01", 10.0, 244, 0.0))
+        for uuids in ([], ["0000180f-0000-1000-8000-00805f9b34fb"]):
+            self.assertIsNone(await self.scan(helper, [self.candidate("Claude-A1B2", uuids=uuids)]))
+        self.assertIsNotNone(await self.scan(helper, [self.candidate(None, uuids=[NUS_SERVICE_UUID.upper()])]))
+
+    async def test_connected_address_is_retained_for_reconnect_with_new_name(self):
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        old = self.candidate("Claude-A1B2")
+        await self.scan(helper, [old])
+        helper._stop.set()
+
+        class Client:
+            services = SimpleNamespace(get_characteristic=lambda _: SimpleNamespace(max_write_without_response_size=244))
+            mtu_size = 247
+            is_connected = True
+
+            async def connect(self):
+                pass
+
+            async def start_notify(self, uuid, callback):
+                self.notify = callback
+
+        with patch("helper.buddy_ble.BleakClient", return_value=Client()) as client, patch("helper.buddy_ble.emit_event") as emit:
+            await helper._connect_and_serve(old[0])
+        self.assertIs(client.call_args.args[0], old[0])
+        self.assertEqual(helper._device_address, old[0].address)
+        self.assertEqual(emit.call_args.args[0]["device"], "Claude-A1B2 (AA:BB:CC:DD:00:01)")
+        renamed = self.candidate("DeepSeek-A1B2")
+        self.assertIs(await self.scan(helper, [self.candidate("DeepSeek-A1B2", "AA:BB:CC:DD:00:02"), renamed]), renamed[0])
+
 
 
 if __name__ == "__main__":

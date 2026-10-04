@@ -118,7 +118,7 @@ async function main(): Promise<void> {
     autoConnect: true,
     approvalTimeoutMs: 120_000,
     heartbeatIntervalMs: 3_000,
-    deviceNamePrefix: 'Claude',
+    deviceAddress: process.env.BUDDY_DEVICE_ADDRESS ?? '',
   })
 
   try {

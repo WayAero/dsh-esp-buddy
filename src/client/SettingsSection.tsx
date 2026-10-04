@@ -190,8 +190,8 @@ export function EspBuddyConfigPage({ view, settingsSource, readStatus, reconnect
         <Switch label={t('config.autoConnect')} checked={draft?.autoConnect ?? false} disabled={!writable} onChange={checked => edit('autoConnect', checked)} />
       </div>
       <label className="dsh_espBuddy_field">
-        <span><strong>{t('config.devicePrefix')}</strong><small>{t('config.devicePrefixDesc')}</small></span>
-        <Input className="dsh_espBuddy_input" type="text" value={draft?.deviceNamePrefix ?? ''} maxLength={32} required disabled={!writable} onChange={event => edit('deviceNamePrefix', event.target.value)} />
+        <span><strong>{t('config.deviceAddress')}</strong><small>{t('config.deviceAddressDesc')}</small></span>
+        <Input className="dsh_espBuddy_input" type="text" value={draft?.deviceAddress ?? ''} maxLength={36} disabled={!writable} onChange={event => edit('deviceAddress', event.target.value)} />
       </label>
       <label className="dsh_espBuddy_field">
         <span><strong>{t('config.approvalTimeout')}</strong><small>{t('config.approvalTimeoutDesc')}</small></span>

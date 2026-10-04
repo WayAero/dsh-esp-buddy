@@ -79,8 +79,32 @@ npm publish --tag latest
 或完整版本号。同一包名与版本号发布后不能重复使用。发布后用 `npm view dsh-esp-buddy dist-tags`
 核对版本，再从官方插件入口安装验证。
 
-`esp-buddy` 行的配置默认启用；在插件管理页启用组合包和该行后，会自动连接名称以 `Claude` 开头、且提供
-Nordic UART Service（NUS）的 Buddy。
+`esp-buddy` 行的配置默认启用；启用组合包和该行后，按广播中的 Nordic UART Service（NUS）UUID
+`6e400001-b5a3-f393-e0a9-e50e24dcca9e` 识别候选设备，不按名称筛选。RX 写入特征为
+`6e400002-b5a3-f393-e0a9-e50e24dcca9e`，TX 通知特征为 `6e400003-b5a3-f393-e0a9-e50e24dcca9e`；
+连接后仍检查两项特征。默认 `DeepSeek-XXXX`、旧版 `Claude-XXXX` 和不带品牌前缀的自定义名称均可使用。
+
+辅助程序使用 Bleak 3.0.2 主动扫描，按服务 UUID 筛选并等待完整扫描窗口（默认 10 秒）。
+[扫描 API](https://bleak.readthedocs.io/en/latest/api/scanner.html) 只返回广播中包含指定服务的候选；
+[Windows 后端](https://bleak.readthedocs.io/en/latest/backends/windows.html) 按地址合并主广播与扫描响应。
+主广播名称最多 8 字节，扫描响应携带完整名称；页面优先显示扫描返回的名称及设备地址，
+若只收到短名就显示短名，名称为空就显示地址，不推算名称或 MAC 后缀。
+扫描窗口内未收到完整名称时，须下次重连扫描才能刷新。
+
+`deviceAddress` 留空时，仅在扫描到一个 NUS 候选时自动连接；多个候选时停止选择，并在最近错误中
+列出名称与地址。在设置页填写目标地址并保存即可选择设备。NUS 不是 Buddy 专用服务，其他 NUS 设备
+也可能成为候选；请核对目标设备，不能用名称或 UUID 判断厂商。若系统未报告服务 UUID，
+即使名称看似 Buddy 或已填写地址也不会连接；不会退回扫描所有蓝牙设备。
+
+设备身份沿用 Bleak 的 `BLEDevice.address`（Windows/Linux 为蓝牙地址，macOS 为系统 UUID）。
+辅助程序成功连接后记住地址，断线后重新扫描同一地址并刷新显示名称；该地址离线时不会换连另一台。
+插件原先没有持久化设备或配对记录；需要跨进程重启固定目标时，在设置中保存 `deviceAddress`，
+设备改名后仍按该地址重连。旧配置 `deviceNamePrefix` 已不参与筛选；升级默认按 UUID 自动发现，
+有多台设备时应配置地址。系统配对记录仍由操作系统维护。
+
+名称由固件“设置 → 设备”编辑：BLE 名称为 1–29 个可打印 ASCII 字节；Wi-Fi 主机名默认
+`ESP32-S3 Buddy`，最多 32 字节，两项保存后重启生效。插件不发送改名命令。
+Wi-Fi 仍为 STA 客户端，这里没有热点、mDNS、网络发现或 Wi-Fi 通信接口。
 首次连接使用固件的安全连接（Secure Connections）与中间人保护（MITM）配置；Windows 需要先在系统蓝牙界面完成配对。
 
 ## 设置与状态
@@ -92,10 +116,10 @@ Nordic UART Service（NUS）的 Buddy。
 - BLE 连接状态、设备名、MTU、蓝牙辅助程序状态和最近收发时间；
 - 当前会话数、运行数、待审批数和 Token 聚合值；
 - 重新连接与复制诊断信息；
-- BLE 设备名前缀、审批超时和状态发送间隔。
+- BLE 设备地址、审批超时和状态发送间隔。
 
 编辑字段后点击“保存”，配置编辑器（ConfigEditor）会写入当前 profile 的 `cordis.patch.yml` 并交由
-Loader 应用；离开页面时，未保存的草稿会丢弃。修改设备名前缀、状态发送间隔或角色包写入间隔会重启
+Loader 应用；离开页面时，未保存的草稿会丢弃。修改设备地址、状态发送间隔或角色包写入间隔会重启
 蓝牙辅助程序；修改审批超时只影响之后收到的新请求。配置页每 2 秒读取一次状态。
 
 “恢复默认设置”移除当前 profile 对页面六项设置的覆盖，并放弃未保存的修改。Harness 重新取继承配置；
@@ -179,7 +203,7 @@ Buddy 在线时，请求同时进入设备队列和 Harness 后续应答链。�
         autoConnect: true
         approvalTimeoutMs: 300000
         heartbeatIntervalMs: 3000
-        deviceNamePrefix: Claude
+        deviceAddress: ""
         rolePackWriteDelayMs: 0
 ```
 

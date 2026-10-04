@@ -42,14 +42,15 @@ class ProtocolError(ValueError):
 def matches_buddy(
     device: BLEDevice,
     advertisement: AdvertisementData,
-    device_name_prefix: str,
 ) -> bool:
-    prefix = device_name_prefix.casefold()
-    name = advertisement.local_name or device.name or ""
-    if not prefix or not name.casefold().startswith(prefix):
-        return False
+    # 名称可能为空、被截短或由用户修改；只接受实际广播的 NUS 服务。
     service_uuids = {uuid.casefold() for uuid in advertisement.service_uuids or []}
-    return not service_uuids or NUS_SERVICE_UUID in service_uuids
+    return NUS_SERVICE_UUID in service_uuids
+
+
+def device_label(device: BLEDevice, advertisement: AdvertisementData) -> str:
+    name = advertisement.local_name or device.name
+    return f"{name} ({device.address})" if name else device.address
 
 
 class ByteLineDecoder:
@@ -179,7 +180,7 @@ def emit_event(event: dict[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class HelperConfig:
-    device_name_prefix: str
+    device_address: str
     scan_timeout: float
     write_chunk_cap: int
     write_line_delay_seconds: float
@@ -193,7 +194,8 @@ class BuddyBleHelper:
         self._tx = TxLineBuffer()
         self._client: BleakClient | None = None
         self._device: BLEDevice | None = None
-        self._device_failures = 0
+        self._device_address = config.device_address
+        self._device_label = ""
         self._transfer_diagnostics: TransferDiagnostics | None = None
 
     async def run(self) -> None:
@@ -249,23 +251,16 @@ class BuddyBleHelper:
         backoff = 1.0
         while not self._stop.is_set():
             try:
+                # 每次重连重新扫描以刷新名称和平台连接信息，目标地址不随改名改变。
+                self._device = await self._scan()
                 if self._device is None:
-                    self._device = await self._scan()
-                    if self._device is None:
-                        raise RuntimeError("Buddy device not found")
+                    raise RuntimeError("Buddy device not found" + (f" at {self._device_address}" if self._device_address else ""))
                 await self._connect_and_serve(self._device)
                 backoff = 1.0
-                self._device_failures = 0
             except asyncio.CancelledError:
                 raise
             except Exception as error:  # Bleak backend errors vary by platform.
                 self._error(str(error))
-                if self._device is not None:
-                    self._device_failures += 1
-                    if self._device_failures >= 6:
-                        LOGGER.info("discarding cached Buddy device after repeated failures")
-                        self._device = None
-                        self._device_failures = 0
             finally:
                 self._finish_transfer("disconnected")
                 await self._disconnect()
@@ -277,11 +272,30 @@ class BuddyBleHelper:
                 backoff = min(backoff * 2.0, 30.0)
 
     async def _scan(self) -> BLEDevice | None:
-        def matches(device: BLEDevice, advertisement: AdvertisementData) -> bool:
-            return matches_buddy(device, advertisement, self._config.device_name_prefix)
-
         LOGGER.info("scanning for Buddy BLE device")
-        return await BleakScanner.find_device_by_filter(matches, timeout=self._config.scan_timeout)
+        # 主广播可能先于完整名称到达；保留整个主动扫描窗口，按地址合并结果。
+        discovered = await BleakScanner.discover(
+            timeout=self._config.scan_timeout,
+            return_adv=True,
+            service_uuids=[NUS_SERVICE_UUID],
+            scanning_mode="active",
+        )
+        candidates = {
+            device.address.casefold(): (device, advertisement)
+            for device, advertisement in discovered.values()
+            if matches_buddy(device, advertisement)
+        }
+        if self._device_address:
+            selected = candidates.get(self._device_address.casefold())
+        elif len(candidates) > 1:
+            labels = "; ".join(device_label(*candidate) for candidate in candidates.values())
+            raise RuntimeError(f"Multiple NUS devices found; set deviceAddress to the intended Buddy: {labels}")
+        else:
+            selected = next(iter(candidates.values()), None)
+        if selected is None:
+            return None
+        self._device_label = device_label(*selected)
+        return selected[0]
 
     async def _connect_and_serve(self, device: BLEDevice) -> None:
         self._disconnected.clear()
@@ -296,7 +310,7 @@ class BuddyBleHelper:
             client_options["winrt"] = {"use_cached_services": True}
         client = BleakClient(device, disconnected_callback=disconnected, **client_options)
         self._client = client
-        LOGGER.info("connecting to %s", device.name or device.address)
+        LOGGER.info("connecting to %s", self._device_label or device.address)
         await client.connect()
 
         # First MITM pairing is completed in the Windows Bluetooth UI. Re-pairing on every
@@ -317,6 +331,8 @@ class BuddyBleHelper:
                 decoder.reset()
 
         await client.start_notify(NUS_TX_UUID, notification)
+        # 成功连接后保持地址，设备暂时离线时不得改连另一台同名设备。
+        self._device_address = device.address
         write_without_response_size = min(
             self._config.write_chunk_cap,
             max(20, rx_characteristic.max_write_without_response_size),
@@ -332,7 +348,7 @@ class BuddyBleHelper:
         emit_event({
             "type": "status",
             "connected": True,
-            "device": device.name or device.address,
+            "device": self._device_label or device.address,
             "mtu": client.mtu_size,
         })
 
@@ -499,7 +515,7 @@ class BuddyBleHelper:
 
 def parse_args(argv: list[str] | None = None) -> HelperConfig:
     parser = argparse.ArgumentParser(description="DSH-ESP-Buddy BLE transport helper")
-    parser.add_argument("--device-name-prefix", default="Claude")
+    parser.add_argument("--device-address", default="")
     parser.add_argument("--scan-timeout", type=float, default=10.0)
     parser.add_argument("--write-chunk-cap", type=int, default=DEFAULT_WRITE_CHUNK_CAP)
     parser.add_argument("--write-line-delay-ms", type=int, default=round(DEFAULT_WRITE_LINE_DELAY_SECONDS * 1_000))
@@ -511,7 +527,7 @@ def parse_args(argv: list[str] | None = None) -> HelperConfig:
     if not 0 <= args.write_line_delay_ms <= round(MAX_WRITE_LINE_DELAY_SECONDS * 1_000):
         parser.error("--write-line-delay-ms must be between 0 and 4")
     return HelperConfig(
-        args.device_name_prefix,
+        args.device_address.strip(),
         args.scan_timeout,
         args.write_chunk_cap,
         args.write_line_delay_ms / 1_000,
