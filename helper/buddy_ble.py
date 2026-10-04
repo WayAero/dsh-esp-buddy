@@ -178,6 +178,12 @@ def emit_event(event: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def configure_output_encoding() -> None:
+    # Windows 管道默认可能为 GBK；JSONL 和日志统一为父进程读取的 UTF-8。
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+    sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 @dataclass(frozen=True)
 class HelperConfig:
     device_address: str
@@ -541,6 +547,7 @@ async def async_main(argv: list[str] | None = None) -> None:
 
 
 def main() -> None:
+    configure_output_encoding()
     try:
         asyncio.run(async_main())
     except KeyboardInterrupt:

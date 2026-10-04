@@ -30,6 +30,34 @@ class FakeChild extends EventEmitter {
 
 const wait = (ms = 0): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
+test('Chinese Helper errors survive UTF-8 chunks split inside a character', async () => {
+  const child = new FakeChild(99)
+  const events: HelperEvent[] = []
+  const logs: string[] = []
+  const manager = new HelperProcessManager({
+    executablePath: 'buddy-ble.exe',
+    spawnProcess: () => {
+      queueMicrotask(() => child.emit('spawn'))
+      return child as never
+    },
+    onEvent: event => events.push(event),
+    onLog: (_level, message) => logs.push(message),
+  })
+  manager.start()
+  await wait()
+  const message = '[WinError -2147023673] 操作已被用户取消。'
+  const eventBytes = Buffer.from(`${JSON.stringify({ type: 'error', message })}\n`, 'utf8')
+  for (const byte of eventBytes) child.stdout.write(Buffer.from([byte]))
+  assert.deepEqual(events, [{ type: 'error', message }])
+  const log = `[buddy-ble] ERROR ${message}`
+  const logBytes = Buffer.from(`${log}\n`, 'utf8')
+  const split = logBytes.indexOf(Buffer.from('操')) + 1
+  child.stderr.write(logBytes.subarray(0, split))
+  child.stderr.write(logBytes.subarray(split))
+  assert.equal(logs.slice(1).join(''), log)
+  await manager.stop()
+})
+
 test('process manager exchanges JSONL and stops the child gracefully', async () => {
   const children: FakeChild[] = []
   const events: HelperEvent[] = []

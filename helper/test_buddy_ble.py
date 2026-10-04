@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import unittest
 from types import SimpleNamespace
@@ -12,9 +13,26 @@ from .buddy_ble import (
     TxLineBuffer,
     ProtocolError,
     chunk_bytes,
+    configure_output_encoding,
+    emit_event,
     matches_buddy,
     parse_args,
 )
+
+
+class OutputEncodingTests(unittest.TestCase):
+    def test_chinese_windows_error_is_utf8_even_when_streams_start_as_gbk(self) -> None:
+        stdout_bytes, stderr_bytes = io.BytesIO(), io.BytesIO()
+        stdout = io.TextIOWrapper(stdout_bytes, encoding="gbk")
+        stderr = io.TextIOWrapper(stderr_bytes, encoding="gbk")
+        message = "[WinError -2147023673] 操作已被用户取消。"
+        with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
+            configure_output_encoding()
+            emit_event({"type": "error", "message": message})
+            stderr.write(message + "\n")
+            stderr.flush()
+            self.assertEqual(json.loads(stdout_bytes.getvalue().decode("utf-8"))["message"], message)
+            self.assertEqual(stderr_bytes.getvalue().decode("utf-8").strip(), message)
 
 
 class ByteLineDecoderTests(unittest.TestCase):

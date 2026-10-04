@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { createInterface } from 'node:readline'
 
 import {
   encodeHelperCommand,
@@ -127,8 +128,11 @@ export class HelperProcessManager {
       }
     })
 
-    child.stderr.on('data', chunk => {
-      const message = String(chunk).trimEnd()
+    // 按完整行解码 UTF-8，保留跨分片的中文、空格和日志级别前缀。
+    const stderrLines = createInterface({ input: child.stderr })
+    child.once('close', () => stderrLines.close())
+    stderrLines.on('line', line => {
+      const message = line.trimEnd()
       if (message.length === 0) return
       const level = /^\[buddy-ble\] (INFO|WARNING|ERROR)\b/.exec(message)?.[1]
       this.log(level === 'INFO' ? 'info' : level === 'ERROR' ? 'error' : 'warning', message)
