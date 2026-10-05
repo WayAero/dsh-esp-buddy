@@ -4,6 +4,7 @@ import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from datetime import datetime, timezone, timedelta
 
 from .buddy_ble import (
     BuddyBleHelper,
@@ -17,6 +18,7 @@ from .buddy_ble import (
     emit_event,
     matches_buddy,
     parse_args,
+    encode_time_sync,
 )
 
 
@@ -48,6 +50,69 @@ class ByteLineDecoderTests(unittest.TestCase):
 
 
 class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
+    async def test_time_slot_coalesces_and_does_not_replace_other_traffic(self) -> None:
+        buffer = TxLineBuffer()
+        for _ in range(1000):
+            await buffer.put("", "time")
+        await buffer.put("snapshot\n")
+        await buffer.put("control1\n", "control")
+        await buffer.put("control2\n", "control")
+        await buffer.put("bulk\n", "bulk")
+        self.assertEqual(await buffer.get(), ("control1\n", "control"))
+        self.assertEqual(await buffer.get(), ("control2\n", "control"))
+        self.assertEqual(await buffer.get(), ("snapshot\n", "snapshot"))
+        self.assertEqual(await buffer.get(), ("bulk\n", "bulk"))
+        self.assertEqual(await buffer.get(), ("", "time"))
+        self.assertFalse(buffer._time_pending)
+        await buffer.put("", "time")
+        await buffer.discard_pending()
+        self.assertFalse(buffer._time_pending)
+
+    async def test_old_connection_and_stopped_helper_drop_time_requests(self) -> None:
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        helper._client = SimpleNamespace(is_connected=True)
+        helper._connection_id = 2
+        await helper._handle_command({"type": "time-sync", "connectionId": 1})
+        self.assertFalse(helper._tx._time_pending)
+        await helper._handle_command({"type": "time-sync", "connectionId": 2})
+        self.assertTrue(helper._tx._time_pending)
+        await helper._tx.discard_pending()
+        helper._disconnected.set()
+        await helper._handle_command({"type": "time-sync", "connectionId": 2})
+        self.assertFalse(helper._tx._time_pending)
+        helper._disconnected.clear()
+        helper._stop.set()
+        await helper._handle_command({"type": "time-sync", "connectionId": 2})
+        self.assertFalse(helper._tx._time_pending)
+
+    async def test_time_is_sampled_at_write_after_queue_delay_and_preserves_frame(self) -> None:
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        writes = []
+        class Client:
+            async def write_gatt_char(self, _uuid, payload, response):
+                writes.append((payload, response))
+        with patch("helper.buddy_ble.datetime") as clock:
+            await helper._tx.put("", "time")
+            clock.now.assert_not_called()
+            line, mode = await helper._tx.get()
+            clock.now.return_value.astimezone.return_value = datetime.fromtimestamp(1791158400, timezone(timedelta(seconds=20700)))
+            await helper._write_line(Client(), line, mode, 20, 20)
+        payload = b"".join(data for data, _ in writes)
+        self.assertEqual(payload, b'{"time":[1791158400,20700]}\n')
+        self.assertTrue(all(response for _, response in writes))
+
+    async def test_partial_time_write_failure_escapes_to_disconnect_without_replaying_frame(self) -> None:
+        helper = BuddyBleHelper(HelperConfig("", 10.0, 244, 0.0))
+        calls = []
+        class Client:
+            async def write_gatt_char(self, _uuid, payload, response):
+                calls.append(payload)
+                if len(calls) == 2:
+                    raise RuntimeError("BLE write failed")
+        with self.assertRaisesRegex(RuntimeError, "BLE write failed"):
+            await helper._write_line(Client(), "", "time", 20, 20)
+        self.assertEqual(len(calls), 2)
+
     async def test_long_chinese_snapshot_fragments_without_losing_utf8_or_newline(self) -> None:
         class Client:
             def __init__(self) -> None:
@@ -162,6 +227,12 @@ class TxLineBufferTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UtilityTests(unittest.TestCase):
+    def test_time_seconds_and_signed_non_hour_timezone_offsets(self) -> None:
+        for seconds in (0, 28800, -18000, 19800, 20700, -12600):
+            with self.subTest(offset=seconds), patch("helper.buddy_ble.datetime") as clock:
+                clock.now.return_value.astimezone.return_value = datetime.fromtimestamp(1791158400.999, timezone(timedelta(seconds=seconds)))
+                self.assertEqual(encode_time_sync(), json.dumps({"time": [1791158400, seconds]}, separators=(",", ":")) + "\n")
+
     def test_chunk_bytes(self) -> None:
         self.assertEqual(chunk_bytes(b"abcdef", 2), [b"ab", b"cd", b"ef"])
 

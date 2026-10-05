@@ -4,7 +4,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { CommandAckRouter } from '../src/role-pack/command-ack.ts'
-import { normalizePackId, ROLE_PACK_MAX_FILE_BYTES } from '../src/role-pack/manifest.ts'
+import { normalizePackId } from '../src/role-pack/manifest.ts'
 import { validateRolePack, type RolePackWireFile } from '../src/role-pack/pack-reader.ts'
 import { crc32IsoHdlc, RolePackTransferManager } from '../src/role-pack/transfer-manager.ts'
 
@@ -47,7 +47,7 @@ test('bundled dsh-pet maid role pack is valid and fits ESP32 V2 limits', () => {
   )
 })
 
-test('role-pack validation enforces V2 file cap and fixed GIF names', () => {
+test('role-pack validation keeps structural checks and allows files above the former size cap', () => {
   assert.equal(normalizePackId('DeepSeek_Whale.Girl'), 'deepseek-whale-girl')
   const pack = validateRolePack([
     wire('idle.gif', ONE_PIXEL_GIF),
@@ -60,9 +60,10 @@ test('role-pack validation enforces V2 file cap and fixed GIF names', () => {
   assert.throws(() => validateRolePack([
     wire('manifest.json', '{"name":"x","mode":"gif"}'), wire('idle_0.gif', ONE_PIXEL_GIF),
   ]), /idle\.gif/)
-  assert.throws(() => validateRolePack([
-    wire('manifest.json', '{"name":"x","mode":"text"}'), wire('large.bin', Buffer.alloc(ROLE_PACK_MAX_FILE_BYTES + 1)),
-  ]), /229,376/)
+  const large = validateRolePack([
+    wire('manifest.json', '{"name":"x","mode":"text"}'), wire('large.bin', Buffer.alloc(1_800_001)),
+  ])
+  assert.ok(large.totalBytes > 1_800_000)
 })
 
 test('CRC-32/ISO-HDLC matches its fixed test vector', () => {

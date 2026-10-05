@@ -30,6 +30,43 @@ class FakeChild extends EventEmitter {
 
 const wait = (ms = 0): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
+test('time requests require a ready connection, respect backpressure and use the new helper after restart', async () => {
+  const children: FakeChild[] = []
+  const writes: string[] = []
+  const manager = new HelperProcessManager({
+    executablePath: 'buddy-ble.exe', restartBaseMs: 1,
+    spawnProcess: (() => {
+      const child = new FakeChild(200 + children.length)
+      children.push(child)
+      child.stdin.on('data', data => writes.push(String(data)))
+      queueMicrotask(() => child.emit('spawn'))
+      return child
+    }) as never,
+  })
+  manager.start()
+  await wait()
+  assert.equal(manager.sendTimeSync(), false)
+  children[0].stdout.write('{"type":"status","connected":true,"connectionId":1}\n')
+  Object.defineProperty(children[0].stdin, 'writableNeedDrain', { configurable: true, value: true })
+  assert.equal(manager.sendTimeSync(), false)
+  Object.defineProperty(children[0].stdin, 'writableNeedDrain', { configurable: true, value: false })
+  assert.equal(manager.sendTimeSync(), true)
+  assert.deepEqual(JSON.parse(writes[0]), { type: 'time-sync', connectionId: 1 })
+  children[0].emit('exit', 1, null)
+  assert.equal(manager.sendTimeSync(), false)
+  await wait(20)
+  assert.equal(children.length, 2)
+  children[0].stdout.write('{"type":"status","connected":true,"connectionId":99}\n')
+  assert.equal(manager.sendTimeSync(), false)
+  children[1].stdout.write('{"type":"status","connected":true,"connectionId":2}\n')
+  assert.equal(manager.sendTimeSync(), true)
+  assert.deepEqual(JSON.parse(writes[1]), { type: 'time-sync', connectionId: 2 })
+  children[1].stdout.write('{"type":"status","connected":false}\n')
+  assert.equal(manager.sendTimeSync(), false)
+  await manager.stop()
+  assert.equal(manager.sendTimeSync(), false)
+})
+
 test('Chinese Helper errors survive UTF-8 chunks split inside a character', async () => {
   const child = new FakeChild(99)
   const events: HelperEvent[] = []

@@ -14,6 +14,7 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -89,10 +90,14 @@ class TxLineBuffer:
         self._snapshot: str | None = None
         self._control: deque[str] = deque()
         self._bulk: deque[str] = deque()
+        # 校时只保留一个请求，与 latest-wins 状态槽分开。
+        self._time_pending = False
 
     async def put(self, line: str, mode: str = "snapshot") -> None:
         async with self._condition:
-            if mode == "control":
+            if mode == "time":
+                self._time_pending = True
+            elif mode == "control":
                 self._control.append(line)
             elif mode == "bulk":
                 self._bulk.append(line)
@@ -104,21 +109,24 @@ class TxLineBuffer:
 
     async def get(self) -> tuple[str, str]:
         async with self._condition:
-            await self._condition.wait_for(lambda: bool(self._control) or self._snapshot is not None or bool(self._bulk))
+            await self._condition.wait_for(lambda: bool(self._control) or self._snapshot is not None or bool(self._bulk) or self._time_pending)
             if self._control:
                 return self._control.popleft(), "control"
             if self._snapshot is not None:
                 line = self._snapshot
                 self._snapshot = None
                 return line, "snapshot"
-            line = self._bulk.popleft()
-            return line, "bulk"
+            if self._bulk:
+                return self._bulk.popleft(), "bulk"
+            self._time_pending = False
+            return "", "time"
 
     async def discard_pending(self) -> None:
         async with self._condition:
             self._snapshot = None
             self._control.clear()
             self._bulk.clear()
+            self._time_pending = False
 
 
 @dataclass
@@ -178,6 +186,15 @@ def emit_event(event: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def encode_time_sync() -> str:
+    """在 BLE 写入前取时，排队不保存时间戳；偏移保留分钟精度和夏令时。"""
+    now = datetime.now().astimezone()
+    offset = now.utcoffset()
+    if offset is None:
+        raise RuntimeError("Local timezone offset is unavailable")
+    return json.dumps({"time": [int(now.timestamp()), int(offset.total_seconds())]}, separators=(",", ":")) + "\n"
+
+
 def configure_output_encoding() -> None:
     # Windows 管道默认可能为 GBK；JSONL 和日志统一为父进程读取的 UTF-8。
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
@@ -199,6 +216,7 @@ class BuddyBleHelper:
         self._disconnected = asyncio.Event()
         self._tx = TxLineBuffer()
         self._client: BleakClient | None = None
+        self._connection_id = 0
         self._device: BLEDevice | None = None
         self._device_address = config.device_address
         self._device_label = ""
@@ -236,6 +254,11 @@ class BuddyBleHelper:
         if not isinstance(command, dict):
             raise ProtocolError("command must be an object")
         command_type = command.get("type")
+        if command_type == "time-sync":
+            # 断线期间到达的旧 IPC 请求不得留到新连接。
+            if type(command.get("connectionId")) is int and command["connectionId"] == self._connection_id and self._client is not None and self._client.is_connected and not self._disconnected.is_set() and not self._stop.is_set():
+                await self._tx.put("", "time")
+            return
         if command_type == "stop":
             LOGGER.info("stop requested")
             self._stop.set()
@@ -337,6 +360,7 @@ class BuddyBleHelper:
                 decoder.reset()
 
         await client.start_notify(NUS_TX_UUID, notification)
+        self._connection_id += 1
         # 成功连接后保持地址，设备暂时离线时不得改连另一台同名设备。
         self._device_address = device.address
         write_without_response_size = min(
@@ -354,6 +378,7 @@ class BuddyBleHelper:
         emit_event({
             "type": "status",
             "connected": True,
+            "connectionId": self._connection_id,
             "device": self._device_label or device.address,
             "mtu": client.mtu_size,
         })
@@ -384,7 +409,9 @@ class BuddyBleHelper:
         write_without_response_size: int,
         write_with_response_size: int,
     ) -> None:
-        response = mode == "control"
+        if mode == "time":
+            line = encode_time_sync()
+        response = mode in ("control", "time")
         write_size = write_with_response_size if response else write_without_response_size
         line_bytes = line.encode("utf-8")
         tracks_role_pack = self._observe_role_pack_command(line, mode)
@@ -409,6 +436,8 @@ class BuddyBleHelper:
     ) -> None:
         while client.is_connected and not self._stop.is_set():
             line, mode = await self._tx.get()
+            if not client.is_connected or self._stop.is_set() or self._disconnected.is_set():
+                return
             await self._write_line(
                 client,
                 line,

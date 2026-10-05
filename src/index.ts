@@ -18,6 +18,7 @@ import { SessionManager } from './session/session-manager.ts'
 import { installEspBuddySettings } from './settings.ts'
 import { BuddyStateStore } from './state/buddy-state.ts'
 import { HelperProcessManager } from './transport/helper-process.ts'
+import { TimeSyncScheduler } from './transport/time-sync.ts'
 import { resolveHelperLaunch } from './transport/launch.ts'
 import { TYPERT_MANIFEST } from './typert.ts'
 
@@ -82,6 +83,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
   let stopStateListener: (() => void) | undefined
 
   const ackRouter = new CommandAckRouter()
+  const timeSync = new TimeSyncScheduler(() => helper?.sendTimeSync() ?? false, message => logger.warn(message))
   const rolePackTransfer = new RolePackTransferManager({
     ackRouter,
     isConnected: () => buddyConnected,
@@ -140,6 +142,7 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
             logger.info(`BLE ${event.connected ? 'connected' : 'disconnected'}${detail}`)
           }
           buddyConnected = event.connected
+          timeSync.setConnected(event.connected)
           if (!event.connected) ackRouter.disconnect()
           if (event.connected) everConnected = true
           if (event.connected && ['completed', 'cancelled', 'failed'].includes(rolePackProgress.phase)) {
@@ -182,12 +185,16 @@ export function apply(ctx: Context, rawConfig: PluginConfig): void {
     })
     stopStateListener = state.onChanged(sendSnapshot)
     // 随插件停用自动清理；连接重启时仍提前撤销旧心跳。
-    stopHeartbeat = ctx.interval(sendSnapshot, config.heartbeatIntervalMs)
+    stopHeartbeat = ctx.interval(() => {
+      sendSnapshot()
+      timeSync.tick(rolePackTransfer.isActive(), config.heartbeatIntervalMs)
+    }, config.heartbeatIntervalMs)
     helper.start()
   }
 
   const stopTransport = async () => {
     clearTransportHooks()
+    timeSync.reset()
     buddyConnected = false
     buddyDevice = undefined
     buddyMtu = undefined

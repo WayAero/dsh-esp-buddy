@@ -29,6 +29,7 @@ export class HelperProcessManager {
   private child?: ChildProcessWithoutNullStreams
   private state: HelperProcessState = 'stopped'
   private stopping = false
+  private connectionId?: number
   private restartTimer?: NodeJS.Timeout
   private restartAttempt = 0
   private readonly crashes: number[] = []
@@ -55,6 +56,7 @@ export class HelperProcessManager {
 
   async stop(): Promise<void> {
     this.stopping = true
+    this.connectionId = undefined
     if (this.restartTimer !== undefined) {
       clearTimeout(this.restartTimer)
       this.restartTimer = undefined
@@ -91,6 +93,14 @@ export class HelperProcessManager {
     this.state = 'stopped'
   }
 
+  sendTimeSync(): boolean {
+    const child = this.child
+    // 不继续向拥塞的 stdin 堆积校时请求，由心跳有界重试。
+    if (!child || this.connectionId === undefined || this.stopping || this.state !== 'running' || !child.stdin.writable || child.stdin.writableNeedDrain) return false
+    child.stdin.write(encodeHelperCommand({ type: 'time-sync', connectionId: this.connectionId }), 'utf8')
+    return true
+  }
+
   private spawnNow(): void {
     this.state = 'starting'
     const spawnProcess = this.options.spawnProcess ?? spawn
@@ -116,10 +126,12 @@ export class HelperProcessManager {
     let exitHandled = false
 
     child.stdout.on('data', chunk => {
+      if (this.child !== child || this.stopping) return
       try {
         for (const line of decoder.push(chunk)) {
           if (line.length === 0) continue
           const event = parseHelperEvent(line)
+          if (event.type === 'status') this.connectionId = event.connected ? event.connectionId : undefined
           if (event.type === 'status' && event.connected) this.restartAttempt = 0
           this.options.onEvent?.(event)
         }
@@ -152,6 +164,7 @@ export class HelperProcessManager {
       if (exitHandled) return
       exitHandled = true
       if (this.child === child) this.child = undefined
+      this.connectionId = undefined
       decoder.reset()
       this.options.onEvent?.({ type: 'status', connected: false })
 

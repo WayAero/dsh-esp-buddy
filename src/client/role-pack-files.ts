@@ -1,13 +1,20 @@
 import type { RolePackWireFile } from '../contract.ts'
+import { rolePackFileWarnings, inspectRolePackFile, ROLE_PACK_RECOMMENDED_TOTAL_BYTES, type RolePackFileReport } from '../role-pack/recommendations.ts'
 
 export interface SelectedRolePackFile {
   readonly path: string
   readonly file: File
 }
 
-const MAX_TOTAL_BYTES = 1_800_000
-const MAX_FILE_BYTES = 229_376
 const GIF_FILE_NAMES = new Set(['idle.gif', 'busy.gif', 'attention.gif', 'sleep.gif'])
+
+export class RolePackSelectionError extends Error {
+  readonly reports: RolePackFileReport[]
+  constructor(message: string, reports: RolePackFileReport[]) {
+    super(message)
+    this.reports = reports
+  }
+}
 
 function leafPath(relativePath: string): string {
   const parts = relativePath.split('/').filter(Boolean)
@@ -55,29 +62,48 @@ export async function filesFromDrop(items: DataTransferItemList): Promise<Select
   return files
 }
 
-export async function validateSelectedFiles(files: readonly SelectedRolePackFile[]): Promise<{ name: string; totalBytes: number }> {
-  if (files.length === 0) throw new Error('角色包没有文件')
-  const seen = new Set<string>()
-  for (const item of files) {
-    if (seen.has(item.path)) throw new Error(`角色包包含重复文件：${item.path}`)
-    seen.add(item.path)
-    if (item.file.size > MAX_FILE_BYTES) throw new Error(`文件超过 229,376 字节：${item.path}`)
-  }
+export async function validateSelectedFiles(files: readonly SelectedRolePackFile[]): Promise<{ name: string; totalBytes: number; warnings: string[]; reports: RolePackFileReport[] }> {
+  const reports: RolePackFileReport[] = []
+  const warnings: string[] = []
   const totalBytes = files.reduce((total, item) => total + item.file.size, 0)
-  if (totalBytes > MAX_TOTAL_BYTES) throw new Error('角色包总大小超过 1,800,000 字节')
-  const manifest = files.find(item => item.path === 'manifest.json')
-  if (manifest === undefined) throw new Error('角色包缺少 manifest.json')
-  if (manifest.file.size > 8_192) throw new Error('manifest.json 超过 8192 字节')
-  const value = JSON.parse(await manifest.file.text()) as Record<string, unknown>
-  if (typeof value.name !== 'string' || value.name.length === 0) throw new Error('manifest.json 缺少 name')
-  if (value.mode !== 'gif' && value.mode !== 'text') throw new Error('manifest.json 的 mode 只能是 gif 或 text')
-  if (value.mode === 'gif') {
-    if (!seen.has('idle.gif')) throw new Error('GIF 角色包至少需要 idle.gif')
-    for (const path of seen) {
-      if (path.endsWith('.gif') && !GIF_FILE_NAMES.has(path)) throw new Error(`GIF 角色包不支持文件名：${path}`)
-    }
+  if (totalBytes > 0xffff_ffff) throw new Error('角色包总大小超出 V2 的 uint32 编码范围')
+  for (const item of files) {
+    const data = new Uint8Array(await item.file.arrayBuffer())
+    const report = inspectRolePackFile(item.path, data)
+    reports.push(report)
+    if (report.severity !== 'invalid') warnings.push(...rolePackFileWarnings(item.path, data))
   }
-  return { name: value.name, totalBytes }
+  try {
+    if (files.length === 0) throw new Error('角色包没有文件')
+    const seen = new Set<string>()
+    for (const item of files) {
+      if (seen.has(item.path)) throw new Error(`角色包包含重复文件：${item.path}`)
+      seen.add(item.path)
+    }
+    const manifest = files.find(item => item.path === 'manifest.json')
+    if (manifest === undefined) throw new Error('角色包缺少 manifest.json')
+    if (manifest.file.size > 8_192) throw new Error('manifest.json 超过 8192 字节')
+    const value = JSON.parse(await manifest.file.text()) as Record<string, unknown>
+    if (typeof value.name !== 'string' || value.name.length === 0) throw new Error('manifest.json 缺少 name')
+    if (value.mode !== 'gif' && value.mode !== 'text') throw new Error('manifest.json 的 mode 只能是 gif 或 text')
+    if (value.mode === 'gif') {
+      if (!seen.has('idle.gif')) throw new Error('GIF 角色包至少需要 idle.gif')
+      for (const path of seen) {
+        if (path.endsWith('.gif') && !GIF_FILE_NAMES.has(path)) throw new Error(`GIF 角色包不支持文件名：${path}`)
+      }
+    }
+    const invalid = reports.find(report => report.severity === 'invalid')
+    if (invalid) throw new RolePackSelectionError(`${invalid.path}：${invalid.error}`, reports)
+    if (totalBytes > ROLE_PACK_RECOMMENDED_TOTAL_BYTES) warnings.push('角色包总大小超过推荐的 1.8 MB')
+    return { name: value.name, totalBytes, warnings, reports }
+  } catch (cause) {
+    if (cause instanceof RolePackSelectionError) throw cause
+    const message = (cause as Error).message
+    const culprit = reports.find(report => message.includes(report.path))
+      ?? reports.find(report => report.path === 'manifest.json')
+    throw new RolePackSelectionError(message, reports.map(report => report === culprit
+      ? { ...report, severity: 'invalid', error: message } : report))
+  }
 }
 
 function bytesToBase64(buffer: ArrayBuffer): string {

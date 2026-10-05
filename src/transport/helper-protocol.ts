@@ -1,11 +1,12 @@
 export const HELPER_IPC_LINE_MAX = 16 * 1024
 
 export type HelperCommand =
+  | { type: 'time-sync'; connectionId: number }
   | { type: 'tx'; line: string; mode?: 'snapshot' | 'control' | 'bulk' }
   | { type: 'stop' }
 
 export type HelperEvent =
-  | { type: 'status'; connected: boolean; device?: string; mtu?: number }
+  | { type: 'status'; connected: boolean; device?: string; mtu?: number; connectionId?: number }
   | { type: 'rx'; line: string }
   | { type: 'error'; message: string }
 
@@ -82,9 +83,13 @@ export function parseHelperEvent(line: string): HelperEvent {
     if (event.mtu !== undefined && (!Number.isSafeInteger(event.mtu) || (event.mtu as number) < 23)) {
       throw new HelperProtocolError('status.mtu must be an integer >= 23')
     }
+    if (event.connectionId !== undefined && (!Number.isSafeInteger(event.connectionId) || (event.connectionId as number) < 1)) {
+      throw new HelperProtocolError('status.connectionId must be a positive integer')
+    }
     return {
       type: 'status',
       connected: event.connected,
+      ...(event.connectionId === undefined ? {} : { connectionId: event.connectionId as number }),
       ...(event.device === undefined ? {} : { device: event.device as string }),
       ...(event.mtu === undefined ? {} : { mtu: event.mtu as number }),
     }
