@@ -62,9 +62,13 @@ profile。安装后在该页面启用组合包及 `esp-buddy` 行，之后也在
 
 ### 维护者发布
 
-发布前运行 `npm test`、`npm run test:python`、`npm run typecheck` 和 `npm pack --dry-run`。
+发布前运行 `npm test`、`npm run test:python`、`npm run typecheck` 和 `npm run check:package`。
 `prepare` 会构建 `dist`；发布包内置 Windows x64 蓝牙程序，使用者不需要编译代码或安装 Python。
 检查包内保留图标、语言元信息和第三方素材的 `NOTICE.txt`，并且不含本机配置、开发过程文档或凭据。
+
+GitHub Actions 的 `Release checks` 在推送、拉取请求及手动触发时执行 Windows 无硬件检查，
+重新构建 Windows Helper，再生成并检查候选包内容，上传 tgz 供下载；不会发布到 npm。
+设备实机验收及 Harness 页面待确认项仍需按本地验收记录完成。
 
 使用 npm 官方源登录后发布；首次发布需先确认版本号和发布标签：
 

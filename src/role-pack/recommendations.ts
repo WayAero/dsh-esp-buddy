@@ -87,9 +87,13 @@ export function inspectGif(data: Uint8Array): GifMetadata {
   let frames = 0
   let pendingDelay = 0
   let totalDelayCentiseconds = 0
+  let hasTrailer = false
   while (offset < data.byteLength) {
     const marker = data[offset++]
-    if (marker === 0x3b) break
+    if (marker === 0x3b) {
+      hasTrailer = true
+      break
+    }
     if (marker === 0x21) {
       if (offset >= data.byteLength) throw new Error('GIF 扩展块不完整')
       const label = data[offset++]
@@ -104,6 +108,13 @@ export function inspectGif(data: Uint8Array): GifMetadata {
     }
     if (marker !== 0x2c) throw new Error('GIF 图像块无效')
     if (offset + 9 > data.byteLength) throw new Error('GIF 图像描述符不完整')
+    const left = readUint16(data, offset)
+    const top = readUint16(data, offset + 2)
+    const frameWidth = readUint16(data, offset + 4)
+    const frameHeight = readUint16(data, offset + 6)
+    // 帧可只更新画布的一部分，但不能为空或超出画布；与推荐分辨率无关。
+    if (frameWidth === 0 || frameHeight === 0) throw new Error('GIF 帧尺寸无效')
+    if (left + frameWidth > width || top + frameHeight > height) throw new Error('GIF 帧超出画布范围')
     table = readColorTable(data, offset + 9, data[offset + 8])
     offset = table.offset
     colors = Math.max(colors, table.colors)
@@ -113,6 +124,7 @@ export function inspectGif(data: Uint8Array): GifMetadata {
     totalDelayCentiseconds += pendingDelay
     pendingDelay = 0
   }
+  if (!hasTrailer) throw new Error('GIF 缺少结束标记')
   if (frames === 0) throw new Error('GIF 不包含动画帧')
   return { width, height, frames, colors, totalDelayCentiseconds }
 }

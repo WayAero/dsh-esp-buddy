@@ -3,7 +3,7 @@ import test from 'node:test'
 import { validateSelectedFiles, RolePackSelectionError } from '../src/client/role-pack-files.ts'
 import { readSkipRolePackWarning, saveSkipRolePackWarning } from '../src/client/role-pack-warning.ts'
 import { validateRolePack } from '../src/role-pack/pack-reader.ts'
-import { rolePackFileWarnings, inspectRolePackFile, specSeverity } from '../src/role-pack/recommendations.ts'
+import { rolePackFileWarnings, inspectRolePackFile, inspectGif, specSeverity } from '../src/role-pack/recommendations.ts'
 
 const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 function gif(width: number, frames: number, colors = 2, delay = 13): Buffer {
@@ -42,6 +42,49 @@ test('recommended boundaries do not warn and large valid GIFs only warn', async 
 
 test('damaged GIF remains an error rather than a recommendation warning', async () => {
   await assert.rejects(validateSelectedFiles(files(new Uint8Array([1, 2, 3]))), /不是有效 GIF/)
+})
+
+test('host and client reject missing trailer, empty frames and frames outside the canvas', async () => {
+  const cases: Array<[Buffer, RegExp]> = [[pixel.subarray(0, -1), /缺少结束标记/]]
+  // 此样本的图像描述符在字节 20 开始；分别修改偏移和尺寸。
+  for (const [offset, value, error] of [
+    [24, 65535, /超出画布/], [26, 65535, /超出画布/],
+    [24, 0, /帧尺寸无效/], [26, 0, /帧尺寸无效/],
+    [20, 1, /超出画布/], [22, 1, /超出画布/],
+  ] as const) {
+    const data = Buffer.from(pixel)
+    data.writeUInt16LE(value, offset)
+    cases.push([data, error])
+  }
+  for (const [data, error] of cases) {
+    assert.throws(() => inspectGif(data), error)
+    const report = inspectRolePackFile('idle.gif', data)
+    assert.equal(report.severity, 'invalid')
+    assert.match(report.error!, error)
+    assert.throws(() => validateRolePack([
+      { path: 'manifest.json', data: Buffer.from('{"name":"test","mode":"gif"}').toString('base64') },
+      { path: 'idle.gif', data: data.toString('base64') },
+    ]), error)
+    await assert.rejects(validateSelectedFiles(files(data)), (cause: unknown) => {
+      assert.ok(cause instanceof RolePackSelectionError)
+      assert.equal(cause.reports.find(row => row.path === 'idle.gif')?.severity, 'invalid')
+      assert.match(cause.message, error)
+      return true
+    })
+  }
+})
+
+test('partial frame ending at canvas boundary is valid and oversized canvas only warns', async () => {
+  const data = gif(168, 1)
+  data.writeUInt16LE(167, 28) // 控制扩展后，帧左偏移 + 1 像素恰好落在画布右边界。
+  const metadata = inspectGif(data)
+  assert.equal(metadata.width, 168)
+  const result = await validateSelectedFiles(files(data))
+  assert.equal(result.reports.find(row => row.path === 'idle.gif')?.severity, 'severe')
+  assert.equal(validateRolePack([
+    { path: 'manifest.json', data: Buffer.from('{"name":"test","mode":"gif"}').toString('base64') },
+    { path: 'idle.gif', data: data.toString('base64') },
+  ]).files.length, 2)
 })
 
 test('warning preference defaults to every send, persists opt-out and can be restored', () => {

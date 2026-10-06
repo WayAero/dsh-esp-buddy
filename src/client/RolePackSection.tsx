@@ -59,15 +59,19 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
   const sending = progress.phase === 'sending'
   const percent = progress.totalBytes > 0 ? Math.min(100, Math.round(progress.sentBytes * 100 / progress.totalBytes)) : 0
 
-  const select = async (files: readonly SelectedRolePackFile[]) => {
+  const select = async (readFiles: () => readonly SelectedRolePackFile[] | Promise<readonly SelectedRolePackFile[]>) => {
     if (active) return
     setShowWarning(false)
     setDontRemind(false)
     setSelected([])
     setSelection(undefined)
     setInvalidReports(undefined)
+    setError(undefined)
     const version = ++selectionVersion.current
     try {
+      // 先清除旧选择，再统一捕获目录读取、文件转换和校验的失败。
+      const files = await readFiles()
+      if (version !== selectionVersion.current) return
       const next = await validateSelectedFiles(files)
       if (version !== selectionVersion.current) return
       setSelected(files)
@@ -142,7 +146,8 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
         onDrop={event => {
           event.preventDefault()
           setDragging(false)
-          void filesFromDrop(event.dataTransfer.items).then(select, cause => setError((cause as Error).message))
+          const items = event.dataTransfer.items
+          void select(() => filesFromDrop(items))
         }}
       >
         <input
@@ -154,7 +159,8 @@ export function RolePackSection({ connected, enabled, progress, lastInstalledRol
           multiple
           hidden
           onChange={event => {
-            if (event.target.files !== null) void select(filesFromInput(event.target.files))
+            const files = event.target.files
+            if (files !== null) void select(() => filesFromInput(files))
             event.target.value = ''
           }}
         />

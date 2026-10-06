@@ -1,0 +1,36 @@
+name: Release checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: npm ci
+      - run: python -m pip install -r helper/requirements.txt pyinstaller==6.16.0
+      - run: npm test
+      - run: npm run test:python
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run build:helper:windows
+      - run: npm run check:package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-candidate
+          path: dsh-esp-buddy-*.tgz
+          if-no-files-found: error
