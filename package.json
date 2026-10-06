@@ -40,17 +40,14 @@
     "role-packs/dsh-pet-maid",
     "cordis.patch.yml",
     "README.md",
+    "DEVELOPMENT_GUIDE.md",
+    "AGENTS.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node build.mjs",
     "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper-windows.ps1",
-    "test:hardware": "node --experimental-strip-types scripts/hardware-approval-test.ts",
-    "prepare": "npm run build",
-    "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "test:python": "python -m unittest -v helper/test_buddy_ble.py",
-    "typecheck": "tsc --noEmit",
-    "check:package": "node scripts/check-release-pack.mjs"
+    "prepare": "npm run build"
   },
   "engines": {
     "node": ">=22.0.0"

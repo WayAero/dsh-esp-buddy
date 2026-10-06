@@ -1,247 +1,211 @@
 # ESP Buddy
 
-ESP Buddy（包名与仓库名：`dsh-esp-buddy`）是 DeepSeek Harness 的 Cordis 插件。它把会话数量、Token 与上下文（Context）
-汇总值、审批请求发送到 ESP32-S3 Buddy。审批同时交给设备和官方会话卡片，任一端决定后另一端提示结束。
-Windows x64 安装包内置蓝牙辅助程序，运行时不需要 Python 环境。
+把 AI Agent 的工作状态放到桌面上的 ESP32-S3 小屏幕，并在需要授权时通过触摸作出决定。
 
-## 运行环境
+**ESP Buddy**（包名 `dsh-esp-buddy`）是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Cordis 插件。它汇总会话、Token 用量和上下文信息，通过蓝牙低功耗（BLE）发送给设备。审批请求同时出现在设备与 Harness 官方会话卡片中，任一端作出决定后同步结束另一端的提示。
 
-- 仅支持 DeepSeek Harness `0.2.0-rc.2`、Cordis `~4.0.4` 和 Node.js `>=22`，不兼容旧版 Harness。
-- 当前安装包面向 Windows x64 的 Desktop 和 Web profile，包含 `bin/win32-x64/buddy-ble.exe`。Linux x64 与 macOS arm64 有启动路径，但包内没有对应的辅助程序。
-- ESP 固件：[WayAero/esp32s3_buddy](https://github.com/WayAero/esp32s3_buddy)
+Windows x64 包内置蓝牙辅助程序，日常使用无需安装 Python。硬件选择、接线与烧录请阅读配套的 [ESP32-S3 Buddy 固件仓库](https://github.com/WayAero/esp32s3-buddy)。
 
-本地 `npm test` 和 `npm run test:hardware` 使用 `--experimental-strip-types`，运行这些命令需要 Node.js 22.6.0 或更新版本。
-下文的 2026-09-12 实机记录是历史结果，不能证明当前 rc.2、Desktop 或其他环境已经过实机验收。
+## 目录
 
-## 本地构建与验证
+- [功能与运行条件](#功能与运行条件)
+- [安装](#安装)
+- [首次连接](#首次连接)
+- [日常使用与设置](#日常使用与设置)
+- [角色包](#角色包)
+- [切换到 Claude Code](#切换到-claude-code)
+- [注意事项与故障排查](#注意事项与故障排查)
+- [仓库结构与开发入口](#仓库结构与开发入口)
+- [参考项目、鸣谢与许可](#参考项目鸣谢与许可)
+- [AI 使用声明与维护说明](#ai-使用声明与维护说明)
 
-```powershell
-npm test
-npm run test:python
-npm run typecheck
-npm run build
-npm run build:helper:windows
-npm pack
-```
+## 功能与运行条件
 
-从源码运行蓝牙辅助程序需要 Python 和 Bleak；重新打包还需要 PyInstaller。安装后的 Windows x64 插件
-直接运行 `bin/win32-x64/buddy-ble.exe`。`npm run test:hardware` 需要已配对的设备，并要求依次在设备上
-选择 Allow Once 和 Deny；普通测试不连接硬件。
+| 功能 | 行为与条件 |
+| --- | --- |
+| 工作状态 | 显示会话总数、运行数、待审批数和会话摘要；状态变化时发送，默认每 3 秒补发 |
+| Token 与上下文 | 汇总会话的 Token 用量；上下文显示最近更新会话提供的估算数据，取决于 Harness 数据是否可用 |
+| 触摸审批 | 设备可选择 `Allow Once` 或 `Deny`；官方卡片保留完整操作信息和审批入口 |
+| 电脑校时 | 连接与重连后发送时间，持续连接每 10 分钟同步，并在检测到系统时间或时区变化时补发 |
+| 角色包发送 | 从插件详情页选择目录，通过 Folder Push V2 安装到设备，无需重新烧录固件 |
+| 连接管理 | 自动连接、断线重连、指定设备地址、查看状态和复制诊断信息 |
+
+当前源码面向 DeepSeek Harness **`0.2.0-rc.2`**、Cordis **`~4.0.4`**，要求 Node.js **`>=22`**。其他 Harness 版本的接口可能不同，请按插件版本的依赖要求选择宿主。
+
+推荐 Windows 11 x64，电脑需具备可用蓝牙。Desktop 和 Web 均通过**运行 Harness 的电脑**连接蓝牙；在其他电脑或手机上打开 Web 页面，不会使用浏览器所在设备的蓝牙。两个 profile 各自管理安装与配置。
+
+设备应运行配套固件并广播 Nordic UART 服务（Nordic UART Service，NUS）。状态、审批、校时与角色包分别需要固件支持相应消息；仅能建立 BLE 连接不代表全部功能兼容。Linux x64 与 macOS arm64 有 Python 启动路径，本包未提供对应二进制程序，部署方法见[开发文档](DEVELOPMENT_GUIDE.md#蓝牙辅助程序)。
 
 ## 安装
 
-### npm 包与官方入口
+### 方式一：Harness 官方插件页
 
-npm 包名为 `dsh-esp-buddy`，插件显示名称为 **ESP Buddy**。首次发布到 npm 后，可在 Harness 的
-“插件（Plugins）→ 添加插件”中输入 `dsh-esp-buddy` 并安装；指定版本时输入 `dsh-esp-buddy@版本号`。
-中国大陆镜像源若尚未同步新版本，可切换至 npm 官方源。
+1. 打开 Harness 的**插件（Plugins）→ 添加插件**。
+2. 输入 `dsh-esp-buddy`，安装 npm 发布版；需要指定版本时输入 `dsh-esp-buddy@版本号`。
+3. 启用 ESP Buddy 组合包及其中的 `esp-buddy` 行，打开插件详情页配置设备。
 
-也可以用 Harness 命令行安装到指定 profile：
+这里指 Harness 内置的插件管理页。插件能否安装取决于所用源是否已有该版本；npm 发布版与仓库源码可能不同。源码安装见方式三。
 
-```powershell
-dsh plugin add dsh-esp-buddy --profile desktop
-# Web profile 名称由自己的 Harness 环境决定
-dsh plugin add dsh-esp-buddy --profile <Web-profile名称>
-```
+升级可在插件页卸载后安装目标版本，再刷新 Web 页面或重启 Desktop。安装、启用和卸载均由 Harness 管理。
 
-在自行管理的 Cordis 工程中可执行 `npm install dsh-esp-buddy`；该命令只安装包，仍需配置
-Cordis 加载器。Harness 用户优先使用官方插件入口或 `dsh plugin add`，由 Harness 管理配置与加载。
+### 方式二：终端安装 npm 包
 
-rc.2 暂不提供插件自动更新；升级时在官方插件页先卸载，再安装新版本。
-
-### 本地安装包
-
-在项目目录执行 `npm pack`，生成 `dsh-esp-buddy-0.5.1.tgz`。在 Windows x64 的 Desktop 或 Web
-profile 中打开官方“插件（Plugins）”页面，用“添加插件”填写该压缩包的绝对路径；同一压缩包可分别安装到两个
-profile。安装后在该页面启用组合包及 `esp-buddy` 行，之后也在该页面管理或卸载，无需插件自行执行卸载命令。
-
-安装时 pnpm 可能报告缺少 `@deepseek-ai/cordis` 和 DSH 包的 peer 依赖：rc.2 的 profile 默认关闭自动补装，Harness 在运行时提供这些包。若只是这组缺失提示且插件显示“运行中”，无需在 profile 手动补装；版本不兼容或组件加载失败应检查具体错误。
-
-从 Git 源安装时，需要让包管理器执行 `prepare` 来构建 `dist`。若安装环境禁止依赖包的构建脚本，
-可先在本仓库执行 `npm pack`，再安装生成的 tgz。
-
-### 维护者发布
-
-发布前运行 `npm test`、`npm run test:python`、`npm run typecheck` 和 `npm run check:package`。
-`prepare` 会构建 `dist`；发布包内置 Windows x64 蓝牙程序，使用者不需要编译代码或安装 Python。
-检查包内保留图标、语言元信息和第三方素材的 `NOTICE.txt`，并且不含本机配置、开发过程文档或凭据。
-
-GitHub Actions 的 `Release checks` 在推送、拉取请求及手动触发时执行 Windows 无硬件检查，
-重新构建 Windows Helper，再生成并检查候选包内容，上传 tgz 供下载；不会发布到 npm。
-设备实机验收及 Harness 页面待确认项仍需按本地验收记录完成。
-
-使用 npm 官方源登录后发布；首次发布需先确认版本号和发布标签：
+使用与当前 Harness 安装对应的 `dsh` 命令，将包安装到实际使用的 profile：
 
 ```powershell
-npm login --registry=https://registry.npmjs.org/
-# 正式版本使用 latest；预发布版本改用 next
-npm publish --dry-run --tag latest
-npm publish --tag latest
+# 桌面端
+dsh plugin --profile desktop add dsh-esp-buddy
+
+# Web；如使用自定义 profile，请替换 web
+dsh plugin --profile web add dsh-esp-buddy
 ```
 
-不带版本的安装默认使用 `latest` 标签；仅发布到 `next` 的候选版本需使用 `dsh-esp-buddy@next`
-或完整版本号。同一包名与版本号发布后不能重复使用。发布后用 `npm view dsh-esp-buddy dist-tags`
-核对版本，再从官方插件入口安装验证。
+命令格式与 profile 的作用见 [Harness 官方打包与安装说明](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish.html)。Desktop 若使用独立的 Harness 数据目录，应使用桌面随附的 CLI 及其环境；安装到另一份 CLI 的同名 profile 不会改变桌面端配置。
 
-`esp-buddy` 行的配置默认启用；启用组合包和该行后，按广播中的 Nordic UART Service（NUS）UUID
-`6e400001-b5a3-f393-e0a9-e50e24dcca9e` 识别候选设备，不按名称筛选。RX 写入特征为
-`6e400002-b5a3-f393-e0a9-e50e24dcca9e`，TX 通知特征为 `6e400003-b5a3-f393-e0a9-e50e24dcca9e`；
-连接后仍检查两项特征。默认 `DeepSeek-XXXX`、旧版 `Claude-XXXX` 和不带品牌前缀的自定义名称均可使用。
+在自行管理的 Cordis 工程中也可执行 `npm install dsh-esp-buddy`，但这只安装 npm 包，还需配置组合包加载及所需的 Harness 服务。普通 Harness 用户使用插件页或 `dsh plugin` 即可。
 
-辅助程序使用 Bleak 3.0.2 主动扫描，按服务 UUID 筛选并等待完整扫描窗口（默认 10 秒）。
-[扫描 API](https://bleak.readthedocs.io/en/latest/api/scanner.html) 只返回广播中包含指定服务的候选；
-[Windows 后端](https://bleak.readthedocs.io/en/latest/backends/windows.html) 按地址合并主广播与扫描响应。
-主广播名称最多 8 字节，扫描响应携带完整名称；页面优先显示扫描返回的名称及设备地址，
-若只收到短名就显示短名，名称为空就显示地址，不推算名称或 MAC 后缀。
-扫描窗口内未收到完整名称时，须下次重连扫描才能刷新。
+### 方式三：从本仓库构建并安装
 
-`deviceAddress` 留空时，仅在扫描到一个 NUS 候选时自动连接；多个候选时停止选择，并在最近错误中
-列出名称与地址。在设置页填写目标地址并保存即可选择设备。NUS 不是 Buddy 专用服务，其他 NUS 设备
-也可能成为候选；请核对目标设备，不能用名称或 UUID 判断厂商。若系统未报告服务 UUID，
-即使名称看似 Buddy 或已填写地址也不会连接；不会退回扫描所有蓝牙设备。
+安装 Git 和 Node.js 22 或更新的兼容版本，在 PowerShell 中执行：
 
-设备身份沿用 Bleak 的 `BLEDevice.address`（Windows/Linux 为蓝牙地址，macOS 为系统 UUID）。
-辅助程序成功连接后记住地址，断线后重新扫描同一地址并刷新显示名称；该地址离线时不会换连另一台。
-插件原先没有持久化设备或配对记录；需要跨进程重启固定目标时，在设置中保存 `deviceAddress`，
-设备改名后仍按该地址重连。旧配置 `deviceNamePrefix` 已不参与筛选；升级默认按 UUID 自动发现，
-有多台设备时应配置地址。系统配对记录仍由操作系统维护。
-
-名称由固件“设置 → 设备”编辑：BLE 名称为 1–29 个可打印 ASCII 字节；Wi-Fi 主机名默认
-`ESP32-S3 Buddy`，最多 32 字节，两项保存后重启生效。插件不发送改名命令。
-Wi-Fi 仍为 STA 客户端，这里没有热点、mDNS、网络发现或 Wi-Fi 通信接口。
-首次连接使用固件的安全连接（Secure Connections）与中间人保护（MITM）配置；Windows 需要先在系统蓝牙界面完成配对。
-
-连接、通知订阅和写通道就绪后，插件通过独立 JSONL 消息 `{"time":[UTC秒时间戳,本地UTC偏移秒]}`
-请求固件校时。每次重连重新发送，持续连接每 10 分钟同步；现有心跳发现休眠恢复、系统时间变化
-（墙上时间与单调时间差至少 5 秒）或时区变化后补同步，不新增用户设置。
-为避免排队后的时间过期，Node 只发送校时请求，蓝牙辅助程序在实际 BLE 写入前读取电脑时间和当地时区，
-保留负时区、UTC+0、半小时及 45 分钟偏移。校时请求合并到独立单槽，不覆盖状态快照；
-控制命令和角色包数据优先，角色包传输期间新校时请求延后处理。断线或停用清除待发送请求，
-旧连接请求不会在新连接发送；IPC 拥塞最多尝试三次，每次间隔一个心跳。
-BLE 写入失败交给已有断线重连流程，重新取时，不在当前连接重放可能已写入一部分的 JSONL 帧。
-该消息没有专用 ACK，入队或写入成功不表示设备已经应用时间，页面不显示“设备已校时”。
-
-## 设置与状态
-
-在“插件（Plugins）”页面打开 ESP Buddy，即可在插件详情页直接设置。Desktop
-和 Web profile 各自管理自己的安装与配置。配置页提供：
-
-- 启用/停用插件，以及自动连接开关；
-- BLE 连接状态、设备名、MTU、蓝牙辅助程序状态和最近收发时间；
-- 当前会话数、运行数、待审批数和 Token 聚合值；
-- 重新连接与复制诊断信息；
-- BLE 设备地址、审批超时和状态发送间隔。
-
-编辑字段后点击“保存”，配置编辑器（ConfigEditor）会写入当前 profile 的 `cordis.patch.yml` 并交由
-Loader 应用；离开页面时，未保存的草稿会丢弃。修改设备地址、状态发送间隔或角色包写入间隔会重启
-蓝牙辅助程序；修改审批超时只影响之后收到的新请求。配置页每 2 秒读取一次状态。
-
-“恢复默认设置”移除当前 profile 对页面六项设置的覆盖，并放弃未保存的修改。Harness 重新取继承配置；
-没有继承值时使用默认值。该操作可能根据生效的设置启停或重启蓝牙连接。
-
-配置加载期间显示“正在加载配置”；配置不可用或只读时，页面说明原因并禁用保存。远程页面若处于官方
-`memory` 模式，不能写入主机配置，请在主机本地的 Web 页面或桌面端编辑。
-
-连接圆点按以下规则显示：已连接为绿色；从未连接成功且没有连接错误时为灰色；连接失败，或曾连接成功后
-断开时为红色。诊断信息提供版本、连接与蓝牙辅助程序状态、最近错误、角色包进度、配置和针对性排查建议，
-不包含会话内容、审批内容或角色包文件数据。
-
-## 审批
-
-会话审批使用 Harness 官方卡片，插件不提供替代卡片。
-
-Buddy 的审批正文优先使用官方中文说明 `displayReason.zh`；缺失或为空白时依次使用英文说明和原始
-`reason`，均不可用时提示在官方会话卡片查看审批原因。不转发卡片下方的完整命令或参数。
-正文最多 1024 个 UTF-8 字节，超长时在开头显示“【说明未完整显示】”，标记计入容量；JSON 转义后
-整行仍限制在 4096 字节内。为容纳审批说明，必要时减少会话摘要项，再缩短正文并保留标记。
-设备完整显示需要支持 1024 字节审批正文和滚动阅读的新版固件；旧固件仍会按其较小容量截断。
-
-Buddy 在线时，请求同时进入设备队列和 Harness 后续应答链。官方页面先答时清除设备请求；设备先答时，客户端
-通过会话状态读取对应的官方 `PendingApproval`，使用公开 `answer()` 完成卡片。客户端每 250 ms 同步已有卡片；
-页面清除还取决于请求传输和应答处理时间。没有 `callId` 且会话、工具名、原因相同的请求按顺序转发到页面，避免误匹配。
-
-设备离线时，新请求直接交给 Harness 后续应答链；在线请求遇到辅助程序失败、审批超时或插件停用时，
-清除设备提示并沿用已转发的应答链，不重复调用后续应答者，也不自动拒绝。Desktop 与 Web 双端提示同步、Web 允许 / 拒绝的实际操作结果，以及断线后页面审批和重连清理已获用户实测确认。安装新版候选包后刷新或重启客户端。
-
-## 角色包发送
-
-在“插件（Plugins）”的 ESP Buddy 配置页“角色包”区域选择或拖入一个角色包目录。目录不能包含子目录；`manifest.json` 的
-`mode` 为 `gif` 时，必须有 `idle.gif`，其余动画文件可用 `busy.gif`、`attention.gif`、`sleep.gif`。
-插件不再按制作规格限制文件大小或角色包总量；总量超过推荐的 1.8 MB 时提醒。`NOTICE.txt` 会作为
-普通文件随角色包传输，以保留素材的授权声明。
-
-角色包只使用 V2：`char_begin` 携带 `v:2` 并请求窗口大小 `4`，设备返回的窗口大小决定每次连续发送的块数。
-每块最多包含 512 个原始字节；发送完一个窗口后，插件等待设备的累计确认（ACK）。`char_begin`、`file`、
-`file_end`、`char_end`、`char_abort` 按顺序逐条发送，使用带响应写入（Write With Response）并等待 ACK；
-`chunk` 按顺序发送，使用无响应写入（Write Without Response）。传输期间暂停发送状态快照；收到窗口 ACK 后、
-下一窗口开始前发送当时最新的状态，旧状态不会逐条补发。设备对 V2 返回 `ok:true,n:0` 时，插件提示升级固件，
-不会改用 V1。
-
-断线、超时或设备返回失败 ACK 时，插件报告失败；仍保持连接且传输已开始时，会尝试发送 `char_abort`。
-设置页可请求取消，插件在当前命令完成后处理取消。安装成功后，页面清除传输进度并显示当前 DSH 进程内
-最近安装的角色包名。
-
-发布包附带 `role-packs/dsh-pet-maid` 示例包。其动画素材来自
-[PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，按作者说明仅可开源使用、禁止商用；
-来源提交、处理方式和使用限制见随包的 [NOTICE.txt](role-packs/dsh-pet-maid/NOTICE.txt)。插件代码采用 MIT，
-不改变该第三方素材的限制。
-
-示例包含 `idle.gif`、`attention.gif`、`busy.gif` 和 `sleep.gif`。新增或重新制作角色 GIF 时，以
-`84×84、≤80 帧、约 8 FPS、≤210 KiB、≤64 色` 作为单文件制作目标。超过推荐规格时，默认每次发送前提醒，
-可选择“继续发送”；勾选“不再提醒”后，当前 Web 或 Desktop 页面环境会记住偏好，可通过“恢复规格提醒”重新开启。
-提醒以文件对照表显示实际参数和推荐值：超出推荐用黄色，任一指标达到推荐值的两倍及以上用红色；
-分辨率按最长边比较。红色超规格提醒仍可继续发送，格式错误显示红色原因并阻止发送。
-损坏的文件、非法目录或无法编码的协议字段仍会报错；设备存储或解码失败由固件 ACK 返回。
-随包动画使用透明背景，64 色包含一个透明色索引，
-不使用抖动。透明显示要求配套固件保留 GIF 透明度（使用 `ARGB8888` 解码）；使用 `RGB565` 解码的固件
-会将透明区域填成 GIF 自身的背景色，无法透出主题底色。此前 84×84、120 帧、472,276 字节的 GIF 曾在 ESP32 实机上伴随 LVGL lock 超时和屏幕卡死，
-因此不作为制作规格。
-当前随包四个 GIF 为 84×84、80 帧、约 8 FPS、64 色，单文件约 172–181 KiB。配套 ESP32 固件按 Buddy 状态选择固定文件名对应的动画；插件不发送 `animation` 字段。
-从原始绿幕素材重制时，运行 `python scripts/build-dsh-pet-role-pack.py <source.gif> <output.gif>`；脚本保存后逐帧重新解码，核对像素和帧时长。
-GIF 只支持完全透明或不透明的边缘；放大显示时建议配套固件开启 `lv_image_set_antialias(..., true)`，并检查绘制开销。
-2026-10-05 用户实机确认当前随包动画的透明背景、主题切换、循环播放和动画切换正常；开启固件缩放抗锯齿后，
-浅色主题下的边缘有所改善。该结果不代表其他角色包或固件配置已通过验收。
-
-连接后，无响应写入的 ATT 载荷取 `min(244, max(20, rx_characteristic.max_write_without_response_size))`。
-蓝牙辅助程序会记录原始数据量、线上字节数、ATT 写入次数、写入耗时、ACK 等待耗时和有效原始吞吐等指标。
-配置文件中的 `rolePackWriteDelayMs` 默认是 `0`；设为 `1` 至 `4` 时，每写完一条无响应 JSONL 消息等待相应毫秒数，
-而不是在每个 ATT 分片后等待。修改此配置会重启蓝牙辅助程序。
-设置页显示百分比、当前文件、已完成文件数、速度和预计剩余时间；速度与预计时间按最近 5 秒的已确认原始字节计算，
-不使用 Base64 或 ATT 字节数，也不显示协议版本或窗口值。发送期间页面会提示保持连接并耐心等待。
-
-历史实机记录（2026-09-12）：使用当时的配套 V2 固件发送 `dsh-pet-maid` 的 814,935 原始字节后安装完成，
-有效原始吞吐为 19.0 KiB/s，当次观察到 8 FPS 动画画面稳定。这项记录不能证明当前设备或其他蓝牙环境
-会达到同样速度。
-
-## 默认配置
-
-发布包携带的默认 patch 为：
-
-```yaml
-- insert:
-    - id: esp-buddy
-      name: dsh-esp-buddy
-      config:
-        enabled: true
-        autoConnect: true
-        approvalTimeoutMs: 300000
-        heartbeatIntervalMs: 3000
-        deviceAddress: ""
-        rolePackWriteDelayMs: 0
+```powershell
+git clone https://github.com/WayAero/dsh-esp-buddy.git
+Set-Location dsh-esp-buddy
+npm ci
+npm run build
+npm pack
 ```
 
-状态快照使用 V2，`usage`、`context` 与 `context_breakdown` 在有数据时加入消息。
-`context.projected` 是下一次请求上下文的估算值，`context.window` 是路由提供的上限；字段缺失表示没有可用值。
-`tokens_today` 为兼容旧解析保留；没有精确日统计时写入 `0`，不能将其当作真实日用量。
+`npm ci` 的 `prepare` 会构建 `dist/`；修改源码后执行 `npm run build` 重新生成产物。`npm pack` 输出 `dsh-esp-buddy-<版本号>.tgz`。Windows x64 源码仓库已携带蓝牙程序，无需额外构建 Python。
 
-## 通信内容与处理范围
+将 tgz 的**绝对路径**填入官方插件页的“添加插件”，或用 CLI 安装。下面的路径和文件名请替换为实际输出：
 
-- 上位机（Host）→ ESP：UTF-8 JSONL 状态快照固定使用 Buddy V2，并保留 V1 既有字段。
-- ESP → 上位机：仅接受仍待处理的审批请求 ID 的 `once` 或 `deny`；页面决定由 Harness 官方应答链返回。插件 Remote 仅向客户端提供设备审批结果，供其同步官方卡片。
-- 多个会话的状态由 Harness 汇总；多个审批请求按收到顺序排队，屏幕一次只显示一个，会话页面只显示所属会话的请求。
-- 蓝牙辅助程序只负责扫描、连接、NUS 收发、分片和重连，不处理会话、Token 或审批。
+```powershell
+dsh plugin --profile desktop add "C:/path/to/dsh-esp-buddy-<版本号>.tgz"
+```
 
-历史实机记录（2026-09-12）：当时的 Windows 版本覆盖设置页、自动连接、状态显示、默认每 3 秒发送状态
-以及 Buddy 的 Allow Once 与 Deny 回传。此记录不覆盖当前 rc.2 的 Desktop/Web 配置页或会话审批卡片。
-本仓库的无硬件测试覆盖多个会话、Token 与上下文汇总、官方卡片与 Buddy 的决定同步、会话隔离和取消清理；
-模拟设备回复不能代替实机结果。
+从 Git URL 直接安装需要包管理器允许执行 `prepare`；若构建脚本被禁用，使用上述本地构建的 tgz。
+
+## 首次连接
+
+1. 按[固件 README](https://github.com/WayAero/esp32s3-buddy#readme)准备硬件、烧录并启动设备。默认蓝牙名称为 `DeepSeek-XXXX`。
+2. 在 Windows **设置 → 蓝牙和设备 → 添加设备 → 蓝牙**中选择 Buddy，按设备屏幕提示完成配对。首次中间人保护（MITM）配对由系统完成，插件不会在每次重连时重复配对。
+3. 在 Harness 插件页启用 ESP Buddy，打开详情页。默认自动连接；一次扫描约需 10 秒，请等待状态变化。
+4. 若只有一台广播 NUS 的候选设备，插件自动连接。若有多台，在“最近错误”中查看名称与地址，将目标地址填入 **BLE 设备地址**并保存。
+5. 连接后启动 Harness 会话，设备随会话活动更新状态；校时消息发送后可在设备上查看时间。
+
+插件**按 NUS 服务 UUID 发现设备，不按名称前缀筛选**。`DeepSeek-XXXX`、`Claude-XXXX` 和自定义名称均可作为候选，但其他产品也可能使用 NUS，请核对地址。即使指定地址，设备仍须广播该服务。
+
+成功连接后，辅助程序在本次进程内记住地址，断线只重连这台设备。需要在 Harness 重启后固定目标时，请保存设备地址。
+
+## 日常使用与设置
+
+在**插件 → ESP Buddy**详情页查看连接状态、设备名称、MTU、蓝牙程序状态、最近收发时间和聚合数据。编辑设置后点击**保存**；离开页面会放弃未保存的草稿。
+
+| 配置键 | 默认值 | 用途 |
+| --- | --- | --- |
+| `enabled` | `true` | 启用插件 |
+| `autoConnect` | `true` | 自动启动连接；关闭后可点击“重新连接”手动连接 |
+| `deviceAddress` | 空字符串 | 自动选择唯一候选；填写后固定目标地址 |
+| `approvalTimeoutMs` | `300000` | 设备审批等待时间，单位毫秒；超时交给 Harness 后续应答链 |
+| `heartbeatIntervalMs` | `3000` | 状态补发间隔，允许 `1000–29000` 毫秒 |
+| `rolePackWriteDelayMs` | `0` | 无响应 JSONL 消息写完后的等待时间，允许 `0–4` 毫秒 |
+
+修改设备地址或两项发送间隔会重启蓝牙辅助程序。审批超时仅影响之后收到的请求。恢复默认设置会移除当前 profile 的设置覆盖；存在继承配置时采用继承值。
+
+配置由 Harness 保存到当前 profile。只读或远程 `memory` 模式页面无法保存时，请在主机本地 Web 页面或 Desktop 中设置。
+
+### 审批与数据含义
+
+- Buddy 一次显示一个请求，按收到顺序排队。正文优先使用官方中文说明，缺失时使用英文说明或原始原因；最多 1024 个 UTF-8 字节，截断时显示“【说明未完整显示】”。完整命令与参数请在官方卡片查看。
+- 页面先决定时清除设备请求；设备先决定时通过官方卡片的公开接口同步结果。客户端应保持运行，以便卡片同步。
+- 设备离线、蓝牙程序失败、超时或插件停用时，未决定的请求交给 Harness 后续应答链，**不会因断线自动拒绝**。
+- Token 是当前纳入汇总的会话数据，不能当作账户账单或精确日用量。上下文是估算值，不是设备测量值。
+- 校时消息没有专用确认（ACK）；发出消息不等于固件已应用时间，以设备显示为准。
+
+## 角色包
+
+从插件详情页的“角色包”区域选择或拖入一个目录，确认文件后发送。目录不能包含子目录。最小 GIF 角色包为：
+
+```text
+my-buddy/
+├── manifest.json
+├── idle.gif          必需：空闲
+├── busy.gif          可选：工作
+├── attention.gif     可选：等待审批
+├── sleep.gif         可选：断线或休息
+└── NOTICE.txt        素材来源及许可（使用第三方素材时保留）
+```
+
+```json
+{ "name": "my-buddy", "mode": "gif" }
+```
+
+建议每个 GIF 使用 **84×84、最多 80 帧、约 8 FPS、最多 210 KiB、最多 64 色**；透明色占一个颜色索引，不使用抖动。建议角色包总量不超过约 1.8 MB。超过制作建议时页面提醒，可继续发送或关闭提醒；非法目录、文件名或损坏格式会阻止发送。设备的存储空间、文件大小与解码能力仍会限制实际安装和播放。
+
+传输需要支持 **Folder Push V2** 的固件，发送时保持连接。可在页面取消；失败时查看连接、超时或固件 ACK 返回的原因。安装成功后在设备 Settings → 角色包中选择。透明背景还需固件保留 GIF 透明度。
+
+仓库及 npm 包附带 [dsh-pet-maid](role-packs/dsh-pet-maid) 示例。npm 用户可在已安装包的同名目录找到它；也可从本仓库获取。素材来自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，**允许开源使用、禁止商用**，请保留 [NOTICE.txt](role-packs/dsh-pet-maid/NOTICE.txt)。制作与协议细节见[开发文档](DEVELOPMENT_GUIDE.md#角色包与素材制作)。
+
+## 切换到 Claude Code
+
+本插件接入 DeepSeek Harness。Claude Code 使用独立的 [cc-buddy-bridge](https://github.com/SnowWarri0r/cc-buddy-bridge)。
+
+设备一次连接一个 BLE 客户端。切换时先停用本插件，再将设备蓝牙名称改为以 `Claude` 开头，保存并重启；按[桥接工具中文说明](https://github.com/SnowWarri0r/cc-buddy-bridge/blob/main/README.zh-CN.md)安装，在对应 Python 环境运行 `cc-buddy-bridge install` 注册钩子（hooks），再运行 `cc-buddy-bridge daemon`。切回 Harness 前退出桥接服务，再启用插件；本插件不要求改回名称。主题选择不改变蓝牙名称。
+
+桥接的基础状态与审批取决于其配置；校时和角色包传输还需对应协议支持，不能将桥接工具面向其他固件的功能全部视为本固件支持。配套固件使用 UTF-8 文本，不启用桥接工具针对其他固件的 `CC_BUDDY_CJK_TARGET` 编码选项。更多条件见[固件接入说明](https://github.com/WayAero/esp32s3-buddy#连接-claude-code)。
+
+## 注意事项与故障排查
+
+| 现象 | 处理方法 |
+| --- | --- |
+| 安装版本不符合预期 | 核对 npm 发布版本与宿主依赖；镜像尚未同步时使用 npm 官方源，或安装明确版本的 tgz |
+| 插件没有运行 | 检查组合包和 `esp-buddy` 行是否启用，查看 Harness 加载错误及依赖版本 |
+| 找不到设备 | 确认设备已启动、电脑蓝牙可用、系统已配对、固件广播 NUS，且未被其他工具连接 |
+| 提示多个 NUS 设备 | 核对候选列表，将目标地址写入 `deviceAddress` 并保存 |
+| 能发现但无法连接 | 检查配对与加密状态、是否被另一 profile 或桥接服务占用；绑定不一致时按固件说明重新配对 |
+| Web 显示配置只读 | 在运行 Harness 的主机本地页面或 Desktop 修改 |
+| 审批说明不完整 | 在官方会话卡片查看完整操作；固件也需支持当前正文容量 |
+| 角色包发送失败 | 查看最近错误；确认支持 V2、文件格式和剩余存储空间，重连后再发送 |
+| 动画底色或显示异常 | 确认 GIF 透明索引、尺寸与固件解码格式；缩小动画以减少内存和绘制开销 |
+| 时间未更新 | 核对电脑时间与时区、BLE 连接及固件校时支持；连接状态不能证明校时已应用 |
+
+BLE 会把审批摘要和状态发送到设备，旁人可从屏幕看到这些信息。插件不转发完整命令参数；“复制诊断信息”不包含会话正文、审批正文或角色包文件数据，但含设备地址和配置，分享前按需遮盖。
+
+若安装出现 peer 依赖缺失提示，应结合插件运行状态判断：Harness 在运行时提供其共享包，缺失提示与版本不兼容、加载失败是不同问题，不要仅凭提示向 profile 随意补装宿主组件。
+
+提交 [Issue](https://github.com/WayAero/dsh-esp-buddy/issues) 时请提供插件版本、Harness 版本、Windows 版本、固件版本、复现步骤、最近错误和必要诊断信息。不要上传配对码、凭据或敏感审批内容。硬件与固件问题请到[固件仓库](https://github.com/WayAero/esp32s3-buddy/issues)反馈。
+
+## 仓库结构与开发入口
+
+```text
+src/                     Harness 事件、状态聚合、审批、协议和设置页
+helper/                  Python/Bleak 蓝牙辅助程序
+bin/win32-x64/           随包提供的 Windows 蓝牙程序
+role-packs/dsh-pet-maid/  示例角色包与版权声明
+assets/plugin-icon.svg   插件图标
+locale/                  插件名称与说明的中英文元信息
+scripts/                 蓝牙程序构建与 GIF 制作工具
+build.mjs                主机端和客户端构建入口
+cordis.patch.yml         Harness 组合包默认配置
+```
+
+用户从本 README 开始；修改插件请阅读 [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)；使用 AI 编程工具请同时阅读 [AGENTS.md](AGENTS.md)。固件的接线、烧录和实现由其独立仓库维护。
+
+## 参考项目、鸣谢与许可
+
+感谢以下项目与作者：
+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：插件、会话与审批服务及客户端接口。
+- [ESP32-S3 Buddy](https://github.com/WayAero/esp32s3-buddy)：配套固件与设备界面。
+- [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)：示例角色动画的来源。
+- [Bleak](https://github.com/hbldh/bleak)：跨平台 BLE 接口；[PyInstaller](https://github.com/pyinstaller/pyinstaller)：蓝牙程序打包工具。
+- [esbuild](https://github.com/evanw/esbuild)、[React](https://github.com/facebook/react)、[Zod](https://github.com/colinhacks/zod) 等工具与依赖。
+
+自有且未另行标注的代码采用 [MIT](LICENSE)。依赖保持各自许可。`dsh-pet` 的动画及相关素材适用来源项目的素材条款，不适用本仓库代码的 MIT：允许开源使用、禁止商用；介绍、展示或分发衍生作品时需附原作者 GitHub 地址。具体来源、处理方式与声明见随角色包保留的 [NOTICE.txt](role-packs/dsh-pet-maid/NOTICE.txt) 和[来源项目许可说明](https://github.com/PC2005-cloud/dsh-pet#许可)。
+
+## AI 使用声明与维护说明
+
+本项目使用 AI 辅助编写代码、排查问题和整理文档。AI 生成内容可能存在错误，使用和修改时请结合源码、工具输出及设备实际表现判断。
+
+欢迎复刻、学习、提出问题、提交改进或自行维护分支。本人精力有限，后续可能无法持续维护，也无法保证问题响应和更新时限。建议保存使用的插件与固件版本，并遵守源码及第三方素材的许可。

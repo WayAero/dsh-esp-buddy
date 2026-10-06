@@ -9,12 +9,20 @@ helper/dist/
 .pyinstaller/
 
 # 本机开发资料，保留在本地，不提交到公开仓库。
-/AGENTS.md
 /cordis.dev.yml
-/docs/dsh-0.2.0-rc.2-migration-plan.md
-/docs/evidence/
-/docs/local/
+/docs/
 /role-packs/*-test/
+
+# 本地测试、验收和过程资料，不进入公开源码。
+/tests/
+/helper/test_buddy_ble.py
+/scripts/hardware-approval-test.ts
+/scripts/check-release-pack.mjs
+/scripts/build-role-pack-test-variants.py
+/role-packs/TEST-VARIANTS.md
+/.github/workflows/release-check.yml
+/assets/third-party/dsh-pet/
+/.venv/
 
 # profile、凭据和临时备份不得进入源码仓库。
 .env
